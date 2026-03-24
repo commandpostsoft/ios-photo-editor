@@ -64,7 +64,7 @@ public final class PhotoEditorViewController: UIViewController {
      */
     public var drawLineWidth: CGFloat = 5.0
 
-    public var photoEditorDelegate: PhotoEditorDelegate?
+    public weak var photoEditorDelegate: PhotoEditorDelegate?
     var colorsCollectionViewDelegate: ColorsCollectionViewDelegate!
     
     // list of controls to be hidden
@@ -108,6 +108,14 @@ public final class PhotoEditorViewController: UIViewController {
         super.loadView()
     }
     
+    override public func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        colorsCollectionViewDelegate.colorDelegate = nil
+        colorsCollectionViewDelegate = nil
+        stickersViewController.stickersViewControllerDelegate = nil
+        stickersViewController = nil
+    }
+
     override public func viewDidLoad() {
         super.viewDidLoad()
         
