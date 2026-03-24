@@ -92,6 +92,7 @@ public final class PhotoEditorViewController: UIViewController {
     var isTyping: Bool = false
     
     
+    var lineWidthSlider: UISlider!
     var stickersViewController: StickersViewController!
 
     public init() {
@@ -140,6 +141,7 @@ public final class PhotoEditorViewController: UIViewController {
         
         
         configureCollectionView()
+        setupLineWidthSlider()
         stickersViewController = StickersViewController(nibName: "StickersViewController", bundle: Bundle.module)
         hideControls()
         loadSavedColors()
@@ -250,6 +252,33 @@ public final class PhotoEditorViewController: UIViewController {
             forCellWithReuseIdentifier: "ColorCollectionViewCell")
     }
     
+    private func setupLineWidthSlider() {
+        lineWidthSlider = UISlider()
+        lineWidthSlider.minimumValue = 1.0
+        lineWidthSlider.maximumValue = 20.0
+        lineWidthSlider.value = Float(drawLineWidth)
+        lineWidthSlider.tintColor = .white
+        lineWidthSlider.translatesAutoresizingMaskIntoConstraints = false
+        lineWidthSlider.addTarget(self, action: #selector(lineWidthChanged(_:)), for: .valueChanged)
+        lineWidthSlider.isHidden = true
+        colorPickerView.addSubview(lineWidthSlider)
+
+        // Expand colorPickerView height to fit the slider
+        for constraint in colorPickerView.constraints where constraint.firstAttribute == .height {
+            constraint.constant = 80
+        }
+
+        NSLayoutConstraint.activate([
+            lineWidthSlider.topAnchor.constraint(equalTo: colorsCollectionView.bottomAnchor, constant: 4),
+            lineWidthSlider.leadingAnchor.constraint(equalTo: colorPickerView.leadingAnchor),
+            lineWidthSlider.trailingAnchor.constraint(equalTo: colorPickerView.trailingAnchor)
+        ])
+    }
+
+    @objc private func lineWidthChanged(_ sender: UISlider) {
+        drawLineWidth = CGFloat(sender.value)
+    }
+
     func setImageView(image: UIImage) {
         imageView.image = image
         
