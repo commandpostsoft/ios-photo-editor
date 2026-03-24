@@ -1,74 +1,140 @@
 # iOS Photo Editor
 
+A powerful and easy-to-use photo editor for iOS, built with Swift and Swift Package Manager.
+
 ## Features
-- [x] Cropping 
-- [x] Adding images -Stickers-
-- [x] Adding Text with colors
-- [x] Drawing with colors
-- [x] Scaling and rotating objects 
-- [x] Deleting objects 
-- [x] Saving to photos and Sharing 
-- [x] Cool animations 
-- [x] Uses iOS Taptic Engine feedback 
+- [x] **Cropping** - Crop images with gesture-based interface
+- [x] **Stickers** - Add custom stickers and emojis
+- [x] **Text Overlay** - Add text with customizable colors
+- [x] **Drawing** - Draw on images with multiple colors
+- [x] **Transformations** - Scale, rotate, and position objects
+- [x] **Delete Objects** - Remove unwanted elements
+- [x] **Export & Share** - Save to Photos and share
+- [x] **Animations** - Smooth, delightful animations
+- [x] **Haptic Feedback** - iOS Taptic Engine integration
+- [x] **High Resolution Export** - Maintains original image quality
+
+## Requirements
+
+- iOS 13.0+
+- Swift 5.5+
+- Xcode 13.0+
 
 ## Installation
 
 ### Swift Package Manager
 
-Add the following to your `Package.swift` file:
+**In Xcode:**
+1. Go to **File → Add Package Dependencies**
+2. Enter the repository URL: `https://github.com/M-Hamed/photo-editor.git`
+3. Select the version you want to use
 
+**In Package.swift:**
 ```swift
 dependencies: [
     .package(url: "https://github.com/M-Hamed/photo-editor.git", from: "1.0.0")
 ]
 ```
 
-Or in Xcode:
-1. Go to **File → Add Package Dependencies**
-2. Enter the repository URL: `https://github.com/M-Hamed/photo-editor.git`
-3. Select the version you want to use
+> **Note:** This package is SPM-only. CocoaPods support has been removed.
 
 ## Usage
 
-### Photo Editor
-
-Create and present the `PhotoEditorViewController`:
+### Basic Implementation
 
 ```swift
 import iOSPhotoEditor
 
+// Create the photo editor
 let photoEditor = PhotoEditorViewController()
 
-//PhotoEditorDelegate
+// Set the delegate to receive callbacks
 photoEditor.photoEditorDelegate = self
 
-//The image to be edited 
-photoEditor.image = image
+// Set the image to be edited
+photoEditor.image = yourUIImage
 
-//Stickers that the user will choose from to add on the image         
-photoEditor.stickers.append(UIImage(named: "sticker" )!)
+// Optional: Add custom stickers
+photoEditor.stickers = [
+    UIImage(named: "sticker1")!,
+    UIImage(named: "sticker2")!
+]
 
-//Optional: To hide controls - array of enum control
-photoEditor.hiddenControls = [.crop, .draw, .share]
+// Optional: Hide specific controls
+photoEditor.hiddenControls = [.save, .share]
 
-//Optional: Colors for drawing and Text, If not set default values will be used
-photoEditor.colors = [.red,.blue,.green]
+// Optional: Customize drawing and text colors
+photoEditor.colors = [.red, .blue, .green, .yellow, .white, .black]
 
-//Present the View Controller
-present(photoEditor, animated: true, completion: nil)
+// Present the editor
+photoEditor.modalPresentationStyle = .fullScreen
+present(photoEditor, animated: true)
 ```
-The `PhotoEditorDelegate` methods.
+
+### Implementing the Delegate
 
 ```swift
-func doneEditing(image: UIImage) {
-    // the edited image
-}
-    
-func canceledEditing() {
-    print("Canceled")
-}
+extension YourViewController: PhotoEditorDelegate {
+    func doneEditing(image: UIImage) async throws {
+        // Handle the edited image
+        imageView.image = image
+        dismiss(animated: true)
+    }
 
+    func canceledEditing() {
+        // Handle cancellation
+        dismiss(animated: true)
+    }
+}
 ```
+
+### Available Controls
+
+You can hide specific controls using the `hiddenControls` property:
+
+```swift
+public enum control {
+    case crop
+    case sticker
+    case draw
+    case text
+    case save
+    case share
+    case clear
+}
+```
+
+### Customization Options
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `image` | `UIImage?` | The image to be edited |
+| `stickers` | `[UIImage]` | Custom stickers for the user to choose from |
+| `colors` | `[UIColor]` | Colors available for drawing and text |
+| `hiddenControls` | `[control]` | Controls to hide from the toolbar |
+
+## Architecture
+
+This package uses:
+- **Swift Package Manager** for dependency management
+- **XIB files** for UI layout
+- **Programmatic UI** for collection view cells
+- **Gesture recognizers** for intuitive interactions
+- **High-resolution rendering** for quality export
+
+## Migration from CocoaPods
+
+If you were using the CocoaPods version, here are the key changes:
+
+1. **Installation**: Use Swift Package Manager instead of CocoaPods
+2. **Initialization**: Simplified to `PhotoEditorViewController()` (no need to specify nibName/bundle)
+3. **Delegate**: The `doneEditing` method is now `async throws`
+4. **Module Name**: Import as `import iOSPhotoEditor`
+
+## Known Issues
+
+- This package requires iOS 13.0+ (up from iOS 10.0 in the CocoaPods version)
+- Some collection view cells are now programmatic instead of XIB-based for better SPM compatibility
 
 <img src="Assets/screenshot.PNG" width="350" height="600" />
 
