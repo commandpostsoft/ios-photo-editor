@@ -14,7 +14,7 @@ import UIKit
  - stickersViewDidDisappear
  */
 
-public protocol PhotoEditorDelegate {
+public protocol PhotoEditorDelegate: AnyObject {
     /**
      - Parameter image: edited Image
      */
@@ -31,7 +31,7 @@ public protocol PhotoEditorDelegate {
  - didSelectImage
  - stickersViewDidDisappear
  */
-protocol StickersViewControllerDelegate {
+protocol StickersViewControllerDelegate: AnyObject {
     /**
      - Parameter view: selected view from StickersViewController
      */
@@ -49,6 +49,6 @@ protocol StickersViewControllerDelegate {
 /**
  - didSelectColor
  */
-protocol ColorDelegate {
+protocol ColorDelegate: AnyObject {
     func didSelectColor(color: UIColor)
 }
