@@ -108,11 +108,12 @@ public final class PhotoEditorViewController: UIViewController {
         super.loadView()
     }
     
-    deinit {
-        stickersViewController?.stickersViewControllerDelegate = nil
-        stickersViewController = nil
-        colorsCollectionViewDelegate?.colorDelegate = nil
+    override public func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        colorsCollectionViewDelegate.colorDelegate = nil
         colorsCollectionViewDelegate = nil
+        stickersViewController.stickersViewControllerDelegate = nil
+        stickersViewController = nil
     }
 
     override public func viewDidLoad() {
