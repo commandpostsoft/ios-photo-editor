@@ -66,6 +66,9 @@ photoEditor.hiddenControls = [.save, .share]
 // Optional: Customize drawing and text colors
 photoEditor.colors = [.red, .blue, .green, .yellow, .white, .black]
 
+// Optional: Set drawing line thickness (default is 5.0)
+photoEditor.drawLineWidth = 8.0
+
 // Present the editor
 photoEditor.modalPresentationStyle = .fullScreen
 present(photoEditor, animated: true)
@@ -112,6 +115,7 @@ public enum control {
 | `stickers` | `[UIImage]` | Custom stickers for the user to choose from |
 | `colors` | `[UIColor]` | Colors available for drawing and text |
 | `hiddenControls` | `[control]` | Controls to hide from the toolbar |
+| `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`) |
 
 ## Architecture
 

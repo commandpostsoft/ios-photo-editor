@@ -59,6 +59,11 @@ public final class PhotoEditorViewController: UIViewController {
      */
     public var colors  : [UIColor] = []
     
+    /**
+     Line width for drawing. Default is 5.0.
+     */
+    public var drawLineWidth: CGFloat = 5.0
+
     public var photoEditorDelegate: PhotoEditorDelegate?
     var colorsCollectionViewDelegate: ColorsCollectionViewDelegate!
     

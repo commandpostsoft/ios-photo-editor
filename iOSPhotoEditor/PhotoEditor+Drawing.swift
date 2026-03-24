@@ -79,7 +79,7 @@ extension PhotoEditorViewController {
             canvasImageView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
             
             // Calculate line width that will look good at both display and original resolution
-            let lineWidth: CGFloat = 5.0 / scale
+            let lineWidth: CGFloat = drawLineWidth / scale
             
             // Draw the new line
             context.move(to: fromPoint)
