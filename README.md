@@ -13,6 +13,7 @@ A powerful and easy-to-use photo editor for iOS, built with Swift and Swift Pack
 - [x] **Animations** - Smooth, delightful animations
 - [x] **Haptic Feedback** - iOS Taptic Engine integration
 - [x] **High Resolution Export** - Maintains original image quality
+- [x] **Undo/Redo** - Undo and redo editing actions with configurable history depth
 
 ## Requirements
 
@@ -69,9 +70,12 @@ photoEditor.colors = [.red, .blue, .green, .yellow, .white, .black]
 // Optional: Set drawing line thickness (default is 5.0)
 photoEditor.drawLineWidth = 8.0
 
-// Optional: Show marker size picker in drawing mode (default is false)
-photoEditor.showMarkerSizePicker = true
+// Optional: Customize marker sizes (picker shown by default)
 photoEditor.markerSizes = [5, 8, 12, 18]
+
+// Undo/redo is enabled by default (up to 5 levels)
+// photoEditor.showUndoRedo = false  // to disable
+// photoEditor.maxUndoLevels = 10    // to allow more undo steps
 
 // Present the editor
 photoEditor.modalPresentationStyle = .fullScreen
@@ -120,8 +124,18 @@ public enum control {
 | `colors` | `[UIColor]` | Colors available for drawing and text |
 | `hiddenControls` | `[control]` | Controls to hide from the toolbar |
 | `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`) |
-| `showMarkerSizePicker` | `Bool` | Show marker size picker in drawing mode (default: `false`) |
+| `showMarkerSizePicker` | `Bool` | Show marker size picker in drawing mode (default: `true`) |
 | `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 4 entries. |
+| `showUndoRedo` | `Bool` | Show undo/redo buttons at the top-left (default: `true`). |
+| `maxUndoLevels` | `Int` | Number of undo steps to keep (default: `5`). Higher values use more memory. |
+
+### Undo/Redo
+
+Undo and redo is enabled by default. It captures a snapshot of the editor state before each action (drawing a stroke, adding text or stickers, cropping, rotating, clearing, or deleting an element). Tapping undo restores the previous snapshot; tapping redo re-applies it.
+
+- The number of undo levels defaults to **5** and is configurable via `maxUndoLevels`.
+- Each snapshot stores the drawing layer, base image, and all text/sticker subview state, so higher values will increase memory usage.
+- Set `showUndoRedo = false` to disable the feature entirely (no snapshots are captured and no buttons are shown).
 
 ## Architecture
 

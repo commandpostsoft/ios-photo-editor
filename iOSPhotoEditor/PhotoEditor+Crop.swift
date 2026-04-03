@@ -14,7 +14,8 @@ extension PhotoEditorViewController: CropViewControllerDelegate {
     
     public func cropViewController(_ controller: CropViewController, didFinishCroppingImage image: UIImage, transform: CGAffineTransform, cropRect: CGRect) {
         controller.dismiss(animated: true, completion: nil)
-        
+        saveSnapshot()
+
         // Crop the drawing layer to match the cropped image
         cropDrawingLayer(transform: transform, cropRect: cropRect)
         

@@ -8,6 +8,7 @@
 
 import UIKit
 
+@objc(PhotoEditorViewController)
 public final class PhotoEditorViewController: UIViewController {
     
     /** holding the 2 imageViews original image and drawing & stickers */
@@ -43,6 +44,7 @@ public final class PhotoEditorViewController: UIViewController {
     @IBOutlet weak var saveButton: UIButton!
     @IBOutlet weak var shareButton: UIButton!
     @IBOutlet weak var clearButton: UIButton!
+    @IBOutlet weak var continueButton: UIButton!
     
     public var image: UIImage?
     var originalImage: UIImage?
@@ -62,13 +64,28 @@ public final class PhotoEditorViewController: UIViewController {
     /**
      Line width for drawing. Default is 5.0.
      */
-    public var drawLineWidth: CGFloat = 5.0
+    public var drawLineWidth: CGFloat = 5.0 {
+        didSet { drawLineWidth = min(max(drawLineWidth, 1.0), 100.0) }
+    }
 
     /**
-     Whether to show the marker size picker in drawing mode. Default is false.
+     Whether to show undo/redo buttons. Default is true.
+     When true, undo/redo buttons appear at the top-left of the screen.
+     Use `maxUndoLevels` to configure how many undo steps are kept.
+     */
+    public var showUndoRedo: Bool = true
+
+    /**
+     Maximum number of undo levels to keep. Default is 5.
+     Higher values use more memory since each level stores a full editor snapshot.
+     */
+    public var maxUndoLevels: Int = 5
+
+    /**
+     Whether to show the marker size picker in drawing mode. Default is true.
      When true and `markerSizes` is non-empty, a row of circles appears below the color picker.
      */
-    public var showMarkerSizePicker: Bool = false
+    public var showMarkerSizePicker: Bool = true
 
     /**
      Array of marker sizes for the marker size picker.
@@ -89,7 +106,14 @@ public final class PhotoEditorViewController: UIViewController {
     var drawColor: UIColor = cPostHighlight
     var textColor: UIColor = cPostHighlight
     var isDrawing: Bool = false
-    var hasImageBeenModified: Bool = false
+    var isLineDrawing: Bool = false
+    var lineStartCanvasPoint: CGPoint?
+    var linePreviewLayer: CAShapeLayer?
+    var lineButton: UIButton?
+    var pickerHiddenWhileDrawing: Bool = false
+    var hasImageBeenModified: Bool = false {
+        didSet { updateActionButtons() }
+    }
     
     // UserDefaults keys for persistence
     private let drawColorKey = "PhotoEditor.DrawColor"
@@ -98,6 +122,7 @@ public final class PhotoEditorViewController: UIViewController {
     var lastPoint: CGPoint!
     var swiped = false
     var lastPanPoint: CGPoint?
+    var pendingDrawSnapshot: EditorSnapshot?
     var lastTextViewTransform: CGAffineTransform?
     var lastTextViewTransCenter: CGPoint?
     var lastTextViewFont:UIFont?
@@ -109,6 +134,11 @@ public final class PhotoEditorViewController: UIViewController {
     var markerSizeCollectionView: UICollectionView?
     var markerSizeCollectionViewDelegate: MarkerSizeCollectionViewDelegate?
     var stickersViewController: StickersViewController!
+
+    var editorUndoManager = EditorUndoManager()
+    private var undoButton: UIButton?
+    private var redoButton: UIButton?
+    var undoRedoStack: UIStackView?
 
     public init() {
         super.init(nibName: "PhotoEditorViewController", bundle: Bundle.module)
@@ -132,6 +162,12 @@ public final class PhotoEditorViewController: UIViewController {
         markerSizeCollectionView = nil
         stickersViewController?.stickersViewControllerDelegate = nil
         stickersViewController = nil
+        undoButton = nil
+        redoButton = nil
+        undoRedoStack = nil
+        linePreviewLayer?.removeFromSuperlayer()
+        linePreviewLayer = nil
+        lineButton = nil
     }
 
     override public func viewDidLoad() {
@@ -161,9 +197,19 @@ public final class PhotoEditorViewController: UIViewController {
         configureCollectionView()
         setupMarkerSizePicker()
         stickersViewController = StickersViewController(nibName: "StickersViewController", bundle: Bundle.module)
+        setupLineButton()
         hideControls()
+        setupDrawButtonLongPress()
+        setupUndoRedoButtons()
+        updateActionButtons()
     }
     
+    override public func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        editorUndoManager.clear()
+        updateUndoRedoButtons()
+    }
+
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         
@@ -190,7 +236,7 @@ public final class PhotoEditorViewController: UIViewController {
         // Adjust constraints based on safe area - use minimal spacing when no safe area needed
         topToolbarTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop : 0
         topGradientTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop : 0
-        colorPickerTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop + 6 : 6
+        colorPickerTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop + 66 : 66
         doneButtonTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop + 11 : 11
     }
     
@@ -263,7 +309,7 @@ public final class PhotoEditorViewController: UIViewController {
         }
         colorsCollectionView.delegate = colorsCollectionViewDelegate
         colorsCollectionView.dataSource = colorsCollectionViewDelegate
-        
+
         colorsCollectionView.register(
             ColorCollectionViewCell.self,
             forCellWithReuseIdentifier: "ColorCollectionViewCell")
@@ -298,15 +344,11 @@ public final class PhotoEditorViewController: UIViewController {
 
         colorPickerView.addSubview(cv)
 
-        // Expand colorPickerView height
-        for constraint in colorPickerView.constraints where constraint.firstAttribute == .height {
-            constraint.constant = 80
-        }
-
+        let cvWidth = CGFloat(sizes.count) * 40
         NSLayoutConstraint.activate([
-            cv.topAnchor.constraint(equalTo: colorsCollectionView.bottomAnchor, constant: 4),
-            cv.leadingAnchor.constraint(equalTo: colorPickerView.leadingAnchor),
+            cv.topAnchor.constraint(equalTo: colorsCollectionView.topAnchor),
             cv.trailingAnchor.constraint(equalTo: colorPickerView.trailingAnchor),
+            cv.widthAnchor.constraint(equalToConstant: cvWidth),
             cv.heightAnchor.constraint(equalToConstant: 40)
         ])
 
@@ -351,11 +393,142 @@ public final class PhotoEditorViewController: UIViewController {
         view.layoutIfNeeded()
     }
     
+    func setTopToolbarItemsHidden(_ hidden: Bool) {
+        undoRedoStack?.isHidden = hidden
+        if hidden {
+            rotateButton?.isHidden = true
+            cropButton?.isHidden = true
+            drawButton?.isHidden = true
+            lineButton?.isHidden = true
+            stickerButton?.isHidden = true
+            textButton?.isHidden = true
+        } else {
+            // Respect hiddenControls when showing items back
+            rotateButton?.isHidden = hiddenControls.contains(.rotate)
+            cropButton?.isHidden = hiddenControls.contains(.crop)
+            drawButton?.isHidden = hiddenControls.contains(.draw)
+            lineButton?.isHidden = hiddenControls.contains(.line)
+            stickerButton?.isHidden = hiddenControls.contains(.sticker)
+            textButton?.isHidden = hiddenControls.contains(.text)
+        }
+    }
+
     func hideToolbar(hide: Bool) {
         topToolbar.isHidden = hide
         topGradient.isHidden = hide
         bottomToolbar.isHidden = hide
         bottomGradient.isHidden = hide
+    }
+
+    func exitDrawingMode() {
+        guard isDrawing else { return }
+        isDrawing = false
+        pickerHiddenWhileDrawing = false
+        canvasImageView.isUserInteractionEnabled = true
+        colorPickerView.isHidden = true
+        markerSizeCollectionView?.isHidden = true
+        showDrawButtonHighlight(false)
+    }
+
+    func exitLineDrawingMode() {
+        guard isLineDrawing else { return }
+        isLineDrawing = false
+        pickerHiddenWhileDrawing = false
+        canvasImageView.isUserInteractionEnabled = true
+        colorPickerView.isHidden = true
+        markerSizeCollectionView?.isHidden = true
+        showLineButtonHighlight(false)
+        linePreviewLayer?.removeFromSuperlayer()
+        linePreviewLayer = nil
+        lineStartCanvasPoint = nil
+    }
+
+    private let drawHighlightTag = 9999
+    private let lineHighlightTag = 9998
+    let lineSubviewTag = 8888
+
+    func showLineButtonHighlight(_ show: Bool) {
+        guard let lineButton = lineButton else { return }
+        if show {
+            guard lineButton.superview?.viewWithTag(lineHighlightTag) == nil else { return }
+            let size: CGFloat = 35
+            let highlight = UIView(frame: CGRect(
+                x: lineButton.frame.midX - size / 2,
+                y: lineButton.frame.midY - size / 2,
+                width: size, height: size))
+            highlight.tag = lineHighlightTag
+            highlight.backgroundColor = UIColor.white.withAlphaComponent(0.25)
+            highlight.layer.cornerRadius = size / 2
+            highlight.isUserInteractionEnabled = false
+            lineButton.superview?.insertSubview(highlight, belowSubview: lineButton)
+        } else {
+            lineButton.superview?.viewWithTag(lineHighlightTag)?.removeFromSuperview()
+        }
+    }
+
+    func showDrawButtonHighlight(_ show: Bool) {
+        guard let drawButton = drawButton else { return }
+        if show {
+            guard drawButton.superview?.viewWithTag(drawHighlightTag) == nil else { return }
+            let size: CGFloat = 35
+            let highlight = UIView(frame: CGRect(
+                x: drawButton.frame.midX - size / 2,
+                y: drawButton.frame.midY - size / 2,
+                width: size, height: size))
+            highlight.tag = drawHighlightTag
+            highlight.backgroundColor = UIColor.white.withAlphaComponent(0.25)
+            highlight.layer.cornerRadius = size / 2
+            highlight.isUserInteractionEnabled = false
+            drawButton.superview?.insertSubview(highlight, belowSubview: drawButton)
+        } else {
+            drawButton.superview?.viewWithTag(drawHighlightTag)?.removeFromSuperview()
+        }
+    }
+
+    private func setupLineButton() {
+        guard let drawButton = drawButton,
+              let stackView = drawButton.superview as? UIStackView else { return }
+
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        let btn = UIButton(type: .custom)
+        btn.setImage(UIImage(systemName: "line.diagonal", withConfiguration: config), for: .normal)
+        btn.tintColor = .white
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        btn.layer.shadowOpacity = 0.15
+        btn.layer.shadowRadius = 1.0
+        btn.addTarget(self, action: #selector(lineButtonTapped(_:)), for: .touchUpInside)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(lineButtonLongPressed(_:)))
+        btn.addGestureRecognizer(longPress)
+
+        // Insert right after the draw button
+        if let drawIndex = stackView.arrangedSubviews.firstIndex(of: drawButton) {
+            stackView.insertArrangedSubview(btn, at: drawIndex + 1)
+        } else {
+            stackView.addArrangedSubview(btn)
+        }
+
+        lineButton = btn
+    }
+
+    @objc private func lineButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, isLineDrawing else { return }
+        pickerHiddenWhileDrawing.toggle()
+        colorPickerView.isHidden = pickerHiddenWhileDrawing
+        markerSizeCollectionView?.isHidden = pickerHiddenWhileDrawing
+    }
+
+    private func setupDrawButtonLongPress() {
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(drawButtonLongPressed(_:)))
+        drawButton.addGestureRecognizer(longPress)
+    }
+
+    @objc private func drawButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, isDrawing else { return }
+        pickerHiddenWhileDrawing.toggle()
+        colorPickerView.isHidden = pickerHiddenWhileDrawing
+        markerSizeCollectionView?.isHidden = pickerHiddenWhileDrawing
     }
     
     // MARK: - Color Persistence
@@ -495,19 +668,238 @@ public final class PhotoEditorViewController: UIViewController {
     
     private func rescaleDrawingImage(_ image: UIImage, scaleX: CGFloat, scaleY: CGFloat) -> UIImage {
         let newSize = CGSize(width: image.size.width * scaleX, height: image.size.height * scaleY)
-        
+
+        guard newSize.width > 0, newSize.height > 0,
+              newSize.width.isFinite, newSize.height.isFinite,
+              newSize.width < 16384, newSize.height < 16384 else {
+            return image
+        }
+
         UIGraphicsBeginImageContextWithOptions(newSize, false, image.scale)
         defer { UIGraphicsEndImageContext() }
-        
+
         image.draw(in: CGRect(origin: .zero, size: newSize))
-        
+
         return UIGraphicsGetImageFromCurrentImageContext() ?? image
+    }
+
+    // MARK: - Undo/Redo
+
+    private func setupUndoRedoButtons() {
+        guard showUndoRedo else { return }
+        editorUndoManager.maxUndoLevels = max(1, maxUndoLevels)
+
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+
+        let undo = UIButton(type: .custom)
+        undo.setImage(UIImage(systemName: "arrow.uturn.backward", withConfiguration: config), for: .normal)
+        undo.tintColor = .white
+        undo.layer.shadowColor = UIColor.black.cgColor
+        undo.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        undo.layer.shadowOpacity = 0.15
+        undo.layer.shadowRadius = 1.0
+        undo.isHidden = true
+        undo.addTarget(self, action: #selector(undoTapped), for: .touchUpInside)
+
+        let redo = UIButton(type: .custom)
+        redo.setImage(UIImage(systemName: "arrow.uturn.forward", withConfiguration: config), for: .normal)
+        redo.tintColor = .white
+        redo.layer.shadowColor = UIColor.black.cgColor
+        redo.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        redo.layer.shadowOpacity = 0.15
+        redo.layer.shadowRadius = 1.0
+        redo.isHidden = true
+        redo.addTarget(self, action: #selector(redoTapped), for: .touchUpInside)
+
+        let stack = UIStackView(arrangedSubviews: [undo, redo])
+        stack.axis = .horizontal
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        topToolbar.addSubview(stack)
+
+        // Find the cancel button in the toolbar to position after it
+        let cancelButton = topToolbar.subviews.first(where: {
+            ($0 as? UIButton)?.actions(forTarget: self, forControlEvent: .touchUpInside)?
+                .contains("cancelButtonTapped:") ?? false
+        })
+
+        if let cancelButton = cancelButton {
+            NSLayoutConstraint.activate([
+                stack.centerYAnchor.constraint(equalTo: topToolbar.centerYAnchor),
+                stack.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 12)
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                stack.centerYAnchor.constraint(equalTo: topToolbar.centerYAnchor),
+                stack.leadingAnchor.constraint(equalTo: topToolbar.leadingAnchor, constant: 54)
+            ])
+        }
+
+        undoButton = undo
+        redoButton = redo
+        undoRedoStack = stack
+    }
+
+    func saveSnapshot() {
+        guard showUndoRedo else { return }
+        let snapshot = createSnapshot()
+        editorUndoManager.pushUndo(snapshot)
+        updateUndoRedoButtons()
+    }
+
+    /// Stage a snapshot for drawing — only committed if a stroke actually occurs.
+    func savePendingDrawSnapshot() {
+        guard showUndoRedo, pendingDrawSnapshot == nil else { return }
+        pendingDrawSnapshot = createSnapshot()
+    }
+
+    /// Commit the pending draw snapshot to the undo stack (called after actual drawing).
+    func commitPendingDrawSnapshot() {
+        guard let snapshot = pendingDrawSnapshot else { return }
+        pendingDrawSnapshot = nil
+        editorUndoManager.pushUndo(snapshot)
+        updateUndoRedoButtons()
+    }
+
+    /// Discard the pending draw snapshot if no drawing occurred.
+    func discardPendingDrawSnapshot() {
+        pendingDrawSnapshot = nil
+    }
+
+    private func createSnapshot() -> EditorSnapshot {
+        var subviewSnapshots: [SubviewSnapshot] = []
+        for subview in canvasImageView.subviews {
+            let kind: SubviewSnapshot.Kind
+            if let textView = subview as? UITextView,
+               let font = textView.font,
+               let color = textView.textColor {
+                kind = .text(textView.text, color, font)
+            } else if let imageView = subview as? UIImageView,
+                      let img = imageView.image {
+                kind = .image(img, imageView.contentMode)
+            } else if let label = subview as? UILabel,
+                      let text = label.text,
+                      let font = label.font {
+                kind = .label(text, label.textColor, font)
+            } else {
+                continue
+            }
+            subviewSnapshots.append(SubviewSnapshot(
+                kind: kind,
+                center: subview.center,
+                transform: subview.transform,
+                bounds: subview.bounds,
+                tag: subview.tag
+            ))
+        }
+        return EditorSnapshot(
+            drawingImage: canvasImageView.image,
+            baseImage: self.image,
+            subviewSnapshots: subviewSnapshots
+        )
+    }
+
+    private func restoreSnapshot(_ snapshot: EditorSnapshot, isRedo: Bool = false) {
+        // Restore drawing layer
+        canvasImageView.image = snapshot.drawingImage
+
+        // Restore base image
+        if let baseImage = snapshot.baseImage {
+            self.image = baseImage
+            setImageView(image: baseImage)
+        }
+
+        // Remove all subviews
+        for subview in canvasImageView.subviews {
+            subview.removeFromSuperview()
+        }
+
+        // Recreate subviews
+        for sub in snapshot.subviewSnapshots {
+            let view: UIView
+            switch sub.kind {
+            case .image(let img, let contentMode):
+                let iv = UIImageView(image: img)
+                iv.contentMode = contentMode
+                view = iv
+            case .text(let text, let color, let font):
+                let tv = UITextView(frame: .zero)
+                tv.text = text
+                tv.textColor = color
+                tv.font = font
+                tv.textAlignment = .center
+                tv.layer.shadowColor = UIColor.black.cgColor
+                tv.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+                tv.layer.shadowOpacity = 0.2
+                tv.layer.shadowRadius = 1.0
+                tv.layer.backgroundColor = UIColor.clear.cgColor
+                tv.autocorrectionType = .no
+                tv.isScrollEnabled = false
+                tv.delegate = self
+                view = tv
+            case .label(let text, let color, let font):
+                let lbl = UILabel(frame: .zero)
+                lbl.text = text
+                lbl.textColor = color
+                lbl.font = font
+                lbl.textAlignment = .center
+                view = lbl
+            }
+            view.bounds = sub.bounds
+            view.center = sub.center
+            view.transform = sub.transform
+            view.tag = sub.tag
+            canvasImageView.addSubview(view)
+            addGestures(view: view)
+        }
+
+        hasImageBeenModified = isRedo || editorUndoManager.canUndo
+        updateUndoRedoButtons()
+    }
+
+    private func updateUndoRedoButtons() {
+        let hasHistory = editorUndoManager.canUndo || editorUndoManager.canRedo
+
+        // Undo: hidden when no history at all, visible+disabled when can't undo but redo exists
+        undoButton?.isHidden = !hasHistory
+        undoButton?.isEnabled = editorUndoManager.canUndo
+        undoButton?.alpha = editorUndoManager.canUndo ? 1.0 : 0.4
+
+        // Redo: completely hidden when nothing to redo
+        redoButton?.isHidden = !editorUndoManager.canRedo
+
+        updateActionButtons()
+    }
+
+    private func updateActionButtons() {
+        let canAct = hasImageBeenModified || editorUndoManager.canUndo
+        continueButton?.isEnabled = canAct
+        continueButton?.alpha = canAct ? 1.0 : 0.3
+        clearButton?.isEnabled = canAct
+        clearButton?.alpha = canAct ? 1.0 : 0.3
+    }
+
+    @objc private func undoTapped() {
+        // Don't undo mid-stroke
+        guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
+        let current = createSnapshot()
+        if let snapshot = editorUndoManager.undo(currentState: current) {
+            restoreSnapshot(snapshot)
+        }
+    }
+
+    @objc private func redoTapped() {
+        guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
+        let current = createSnapshot()
+        if let snapshot = editorUndoManager.redo(currentState: current) {
+            restoreSnapshot(snapshot, isRedo: true)
+        }
     }
 }
 
 extension PhotoEditorViewController: ColorDelegate {
     func didSelectColor(color: UIColor) {
-        if isDrawing {
+        if isDrawing || isLineDrawing {
             self.drawColor = color
             saveDrawColor()
             if let cv = markerSizeCollectionView {

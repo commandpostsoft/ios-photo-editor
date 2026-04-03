@@ -14,6 +14,7 @@ public enum control {
     case crop
     case sticker
     case draw
+    case line
     case text
     case rotate
     case save
@@ -26,40 +27,93 @@ extension PhotoEditorViewController {
      //MARK: Top Toolbar
     
     @IBAction func cancelButtonTapped(_ sender: Any) {
-        photoEditorDelegate?.canceledEditing()
-        self.dismiss(animated: true, completion: nil)
+        if hasImageBeenModified || editorUndoManager.canUndo {
+            let alert = UIAlertController(
+                title: "Discard Changes?",
+                message: "You have unsaved changes. Are you sure you want to discard them?",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Keep Editing", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
+                self?.photoEditorDelegate?.canceledEditing()
+                self?.dismiss(animated: true, completion: nil)
+            })
+            present(alert, animated: true)
+        } else {
+            photoEditorDelegate?.canceledEditing()
+            self.dismiss(animated: true, completion: nil)
+        }
     }
 
     @IBAction func cropButtonTapped(_ sender: UIButton) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         let controller = CropViewController()
         controller.delegate = self
         controller.image = image
         let navController = UINavigationController(rootViewController: controller)
-        
-        // Ensure navigation bar is opaque with proper styling
-        navController.navigationBar.isTranslucent = false
-        navController.navigationBar.backgroundColor = UIColor.black
-        navController.navigationBar.barTintColor = UIColor.black
-        navController.navigationBar.tintColor = UIColor.white
-        
+
+        // Dark navigation bar appearance
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = .black
+        navAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        navController.navigationBar.standardAppearance = navAppearance
+        navController.navigationBar.scrollEdgeAppearance = navAppearance
+        navController.navigationBar.tintColor = .white
+
+        // Dark toolbar appearance
+        let toolbarAppearance = UIToolbarAppearance()
+        toolbarAppearance.configureWithOpaqueBackground()
+        toolbarAppearance.backgroundColor = .black
+        navController.toolbar.standardAppearance = toolbarAppearance
+        navController.toolbar.scrollEdgeAppearance = toolbarAppearance
+        navController.toolbar.tintColor = .white
+
+        navController.modalPresentationStyle = .fullScreen
+        navController.view.backgroundColor = .black
+
         present(navController, animated: true, completion: nil)
     }
 
     @IBAction func stickersButtonTapped(_ sender: Any) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         addStickersViewController()
     }
 
+    @objc func lineButtonTapped(_ sender: Any) {
+        if isLineDrawing {
+            exitLineDrawingMode()
+        } else {
+            exitDrawingMode()
+            isLineDrawing = true
+            canvasImageView.isUserInteractionEnabled = false
+            let showPicker = !pickerHiddenWhileDrawing
+            colorPickerView.isHidden = !showPicker
+            markerSizeCollectionView?.isHidden = !showPicker
+            showLineButtonHighlight(true)
+        }
+    }
+
     @IBAction func drawButtonTapped(_ sender: Any) {
-        isDrawing = true
-        canvasImageView.isUserInteractionEnabled = false
-        doneButton.isHidden = false
-        colorPickerView.isHidden = false
-        markerSizeCollectionView?.isHidden = false
-        hideToolbar(hide: true)
+        exitLineDrawingMode()
+        if isDrawing {
+            exitDrawingMode()
+        } else {
+            isDrawing = true
+            canvasImageView.isUserInteractionEnabled = false
+            let showPicker = !pickerHiddenWhileDrawing
+            colorPickerView.isHidden = !showPicker
+            markerSizeCollectionView?.isHidden = !showPicker
+            showDrawButtonHighlight(true)
+        }
     }
 
     @IBAction func textButtonTapped(_ sender: Any) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         isTyping = true
+        setTopToolbarItemsHidden(true)
         let textView = UITextView(frame: CGRect(x: 0, y: canvasImageView.center.y,
                                                 width: UIScreen.main.bounds.width, height: 30))
         
@@ -80,8 +134,11 @@ extension PhotoEditorViewController {
     }    
     
     @IBAction func rotateButtonTapped(_ sender: Any) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         guard let image = self.image else { return }
-        
+        saveSnapshot()
+
         // Rotate the full resolution image 90 degrees clockwise
         let rotatedImage = image.rotate(radians: .pi / 2)
         
@@ -139,20 +196,26 @@ extension PhotoEditorViewController {
     @IBAction func doneButtonTapped(_ sender: Any) {
         view.endEditing(true)
         doneButton.isHidden = true
+        exitDrawingMode()
+        exitLineDrawingMode()
         colorPickerView.isHidden = true
         markerSizeCollectionView?.isHidden = true
         canvasImageView.isUserInteractionEnabled = true
+        setTopToolbarItemsHidden(false)
         hideToolbar(hide: false)
-        isDrawing = false
     }
     
     //MARK: Bottom Toolbar
     
     @IBAction func saveButtonTapped(_ sender: AnyObject) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         UIImageWriteToSavedPhotosAlbum(createHighResolutionImage(),self, #selector(PhotoEditorViewController.image(_:withPotentialError:contextInfo:)), nil)
     }
-    
+
     @IBAction func shareButtonTapped(_ sender: UIButton) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         let activity = UIActivityViewController(activityItems: [createHighResolutionImage()], applicationActivities: nil)
         if let popover = activity.popoverPresentationController {
             popover.sourceView = sender
@@ -162,33 +225,39 @@ extension PhotoEditorViewController {
     }
     
     @IBAction func clearButtonTapped(_ sender: AnyObject) {
-        //clear drawing
-        canvasImageView.image = nil
-        //clear stickers and textviews
-        for subview in canvasImageView.subviews {
-            subview.removeFromSuperview()
-        }
-        
-        // Restore original image (undo crops and rotations)
-        if let originalImage = originalImage {
-            setImageView(image: originalImage)
-            self.image = originalImage
-        }
-        
-        // Reset modification state
-        hasImageBeenModified = false
+        exitDrawingMode()
+        exitLineDrawingMode()
+        let alert = UIAlertController(
+            title: "Clear All Changes?",
+            message: "This will remove all changes and restore the original image.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Clear", style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
+            self.saveSnapshot()
+            self.canvasImageView.image = nil
+            for subview in self.canvasImageView.subviews {
+                subview.removeFromSuperview()
+            }
+            if let originalImage = self.originalImage {
+                self.setImageView(image: originalImage)
+                self.image = originalImage
+            }
+            self.hasImageBeenModified = false
+        })
+        present(alert, animated: true)
     }
     
     @IBAction func continueButtonPressed(_ sender: Any) {
+        exitDrawingMode()
+        exitLineDrawingMode()
         if hasImageBeenModified {
             // Image was modified, process and return high-resolution edited image
             let img = createHighResolutionImage()
             Task { @MainActor in
                 do {
-                    // Call delegate to handle the edited image
-                    try? await photoEditorDelegate?.doneEditing(image: img)
-                }catch {
-                    // Handle any errors that may occur during delegate call
+                    try await photoEditorDelegate?.doneEditing(image: img)
+                } catch {
                     print("Error in doneEditing: \(error)")
                 }
             }
@@ -209,13 +278,15 @@ extension PhotoEditorViewController {
     func hideControls() {
         for control in hiddenControls {
             switch control {
-                
+
             case .clear:
                 clearButton.isHidden = true
             case .crop:
                 cropButton.isHidden = true
             case .draw:
                 drawButton.isHidden = true
+            case .line:
+                lineButton?.isHidden = true
             case .save:
                 saveButton.isHidden = true
             case .share:
