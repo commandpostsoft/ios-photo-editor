@@ -26,11 +26,25 @@ extension PhotoEditorViewController {
      //MARK: Top Toolbar
     
     @IBAction func cancelButtonTapped(_ sender: Any) {
-        photoEditorDelegate?.canceledEditing()
-        self.dismiss(animated: true, completion: nil)
+        if hasImageBeenModified || editorUndoManager.canUndo {
+            let alert = UIAlertController(
+                title: "Discard Changes?",
+                message: "You have unsaved changes. Are you sure you want to discard them?",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Keep Editing", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { _ in
+                self.photoEditorDelegate?.canceledEditing()
+                self.dismiss(animated: true, completion: nil)
+            })
+            present(alert, animated: true)
+        } else {
+            photoEditorDelegate?.canceledEditing()
+            self.dismiss(animated: true, completion: nil)
+        }
     }
 
     @IBAction func cropButtonTapped(_ sender: UIButton) {
+        exitDrawingMode()
         let controller = CropViewController()
         controller.delegate = self
         controller.image = image
@@ -46,20 +60,27 @@ extension PhotoEditorViewController {
     }
 
     @IBAction func stickersButtonTapped(_ sender: Any) {
+        exitDrawingMode()
         addStickersViewController()
     }
 
     @IBAction func drawButtonTapped(_ sender: Any) {
-        isDrawing = true
-        canvasImageView.isUserInteractionEnabled = false
-        doneButton.isHidden = false
-        colorPickerView.isHidden = false
-        markerSizeCollectionView?.isHidden = false
-        hideToolbar(hide: true)
+        if isDrawing {
+            exitDrawingMode()
+        } else {
+            isDrawing = true
+            canvasImageView.isUserInteractionEnabled = false
+            let showPicker = !pickerHiddenWhileDrawing
+            colorPickerView.isHidden = !showPicker
+            markerSizeCollectionView?.isHidden = !showPicker
+            showDrawButtonHighlight(true)
+        }
     }
 
     @IBAction func textButtonTapped(_ sender: Any) {
+        exitDrawingMode()
         isTyping = true
+        saveSnapshot()
         let textView = UITextView(frame: CGRect(x: 0, y: canvasImageView.center.y,
                                                 width: UIScreen.main.bounds.width, height: 30))
         
@@ -80,8 +101,10 @@ extension PhotoEditorViewController {
     }    
     
     @IBAction func rotateButtonTapped(_ sender: Any) {
+        exitDrawingMode()
         guard let image = self.image else { return }
-        
+        saveSnapshot()
+
         // Rotate the full resolution image 90 degrees clockwise
         let rotatedImage = image.rotate(radians: .pi / 2)
         
@@ -139,20 +162,20 @@ extension PhotoEditorViewController {
     @IBAction func doneButtonTapped(_ sender: Any) {
         view.endEditing(true)
         doneButton.isHidden = true
-        colorPickerView.isHidden = true
-        markerSizeCollectionView?.isHidden = true
+        exitDrawingMode()
         canvasImageView.isUserInteractionEnabled = true
         hideToolbar(hide: false)
-        isDrawing = false
     }
     
     //MARK: Bottom Toolbar
     
     @IBAction func saveButtonTapped(_ sender: AnyObject) {
+        exitDrawingMode()
         UIImageWriteToSavedPhotosAlbum(createHighResolutionImage(),self, #selector(PhotoEditorViewController.image(_:withPotentialError:contextInfo:)), nil)
     }
-    
+
     @IBAction func shareButtonTapped(_ sender: UIButton) {
+        exitDrawingMode()
         let activity = UIActivityViewController(activityItems: [createHighResolutionImage()], applicationActivities: nil)
         if let popover = activity.popoverPresentationController {
             popover.sourceView = sender
@@ -162,6 +185,8 @@ extension PhotoEditorViewController {
     }
     
     @IBAction func clearButtonTapped(_ sender: AnyObject) {
+        exitDrawingMode()
+        saveSnapshot()
         //clear drawing
         canvasImageView.image = nil
         //clear stickers and textviews
@@ -180,6 +205,7 @@ extension PhotoEditorViewController {
     }
     
     @IBAction func continueButtonPressed(_ sender: Any) {
+        exitDrawingMode()
         if hasImageBeenModified {
             // Image was modified, process and return high-resolution edited image
             let img = createHighResolutionImage()

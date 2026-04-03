@@ -19,6 +19,7 @@
                 <outlet property="canvasImageView" destination="n3p-yR-4xc" id="OED-1L-YMz"/>
                 <outlet property="canvasView" destination="S1Y-ZS-dct" id="p6I-kg-UUU"/>
                 <outlet property="clearButton" destination="Kpe-Ez-Cio" id="C0i-3L-kLI"/>
+                <outlet property="continueButton" destination="wNH-TU-KxG" id="continueButton-outlet"/>
                 <outlet property="colorPickerTopConstraint" destination="mok-x4-xHA" id="color-picker-constraint"/>
                 <outlet property="colorPickerView" destination="Cy8-ap-fH9" id="KJx-KY-rfM"/>
                 <outlet property="colorPickerViewBottomConstraint" destination="mok-x4-xHA" id="SKq-N5-bcn"/>
@@ -302,7 +303,6 @@
                     <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                     <constraints>
                         <constraint firstItem="GaQ-XR-asZ" firstAttribute="leading" secondItem="Cy8-ap-fH9" secondAttribute="leading" id="5uh-Qw-RZB"/>
-                        <constraint firstAttribute="width" constant="280" id="CyW-kJ-8nH"/>
                         <constraint firstAttribute="height" constant="50" id="KBh-Ry-wrN"/>
                         <constraint firstItem="GaQ-XR-asZ" firstAttribute="top" secondItem="Cy8-ap-fH9" secondAttribute="top" id="LEF-vO-2nq"/>
                         <constraint firstAttribute="trailing" secondItem="GaQ-XR-asZ" secondAttribute="trailing" id="ZAL-PE-sPi"/>
@@ -323,6 +323,7 @@
                 <constraint firstItem="ZGa-1B-gkO" firstAttribute="leading" secondItem="HPk-Bg-V0q" secondAttribute="leading" id="YYk-Vg-obo"/>
                 <constraint firstAttribute="trailing" secondItem="KxU-y4-Jwh" secondAttribute="trailing" constant="12" id="Z0h-d5-J2Z"/>
                 <constraint firstItem="Cy8-ap-fH9" firstAttribute="leading" secondItem="HPk-Bg-V0q" secondAttribute="leading" constant="12" id="dlF-iN-Gjg"/>
+                <constraint firstAttribute="trailing" secondItem="Cy8-ap-fH9" secondAttribute="trailing" constant="12" id="colorPicker-trailing"/>
                 <constraint firstAttribute="trailing" secondItem="S1Y-ZS-dct" secondAttribute="trailing" id="jwU-EC-jaR"/>
                 <constraint firstAttribute="trailing" secondItem="87h-1G-t5q" secondAttribute="trailing" id="kaD-bR-ZZt"/>
                 <constraint firstItem="S1Y-ZS-dct" firstAttribute="centerY" secondItem="HPk-Bg-V0q" secondAttribute="centerY" id="lCZ-Hj-EUs"/>

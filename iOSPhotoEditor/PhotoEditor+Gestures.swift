@@ -205,6 +205,7 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
             let point = recognizer.location(in: self.view)
             
             if deleteView.frame.contains(point) { // Delete the view
+                saveSnapshot()
                 view.removeFromSuperview()
                 if #available(iOS 10.0, *) {
                     let generator = UINotificationFeedbackGenerator()

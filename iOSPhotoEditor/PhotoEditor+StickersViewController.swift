@@ -51,7 +51,8 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
     
     func didSelectView(view: UIView) {
         self.removeStickersView()
-        
+        saveSnapshot()
+
         view.center = canvasImageView.center
         self.canvasImageView.addSubview(view)
         //Gestures
@@ -61,7 +62,8 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
     
     func didSelectImage(image: UIImage) {
         self.removeStickersView()
-        
+        saveSnapshot()
+
         let imageView = UIImageView(image: image)
         imageView.contentMode = .scaleAspectFit
         imageView.frame.size = CGSize(width: 150, height: 150)

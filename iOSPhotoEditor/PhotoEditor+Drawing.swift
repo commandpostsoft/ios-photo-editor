@@ -18,6 +18,7 @@ extension PhotoEditorViewController {
                 let canvasPoint = touch.location(in: self.canvasImageView)
                 // Only start drawing if within image bounds
                 if isPointWithinImageBounds(canvasPoint) {
+                    saveSnapshot()
                     // Convert canvas coordinates to image coordinates
                     lastPoint = convertCanvasPointToImagePoint(canvasPoint)
                 } else {
