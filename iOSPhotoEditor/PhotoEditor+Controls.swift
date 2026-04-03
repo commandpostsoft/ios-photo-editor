@@ -54,7 +54,7 @@ extension PhotoEditorViewController {
         canvasImageView.isUserInteractionEnabled = false
         doneButton.isHidden = false
         colorPickerView.isHidden = false
-        lineWidthSlider.isHidden = false
+        markerSizeCollectionView?.isHidden = false
         hideToolbar(hide: true)
     }
 
@@ -127,7 +127,7 @@ extension PhotoEditorViewController {
         view.endEditing(true)
         doneButton.isHidden = true
         colorPickerView.isHidden = true
-        lineWidthSlider.isHidden = true
+        markerSizeCollectionView?.isHidden = true
         canvasImageView.isUserInteractionEnabled = true
         hideToolbar(hide: false)
         isDrawing = false
