@@ -54,7 +54,7 @@ extension PhotoEditorViewController {
         canvasImageView.isUserInteractionEnabled = false
         doneButton.isHidden = false
         colorPickerView.isHidden = false
-        lineWidthSlider.isHidden = false
+        markerSizeCollectionView?.isHidden = false
         hideToolbar(hide: true)
     }
 
@@ -100,26 +100,39 @@ extension PhotoEditorViewController {
             let rotatedDrawing = drawingImage.rotate(radians: .pi / 2)
             canvasImageView.image = rotatedDrawing
         }
-        
+
         // Rotate and reposition all subviews (text, stickers)
         let centerX = canvasImageView.bounds.width / 2
         let centerY = canvasImageView.bounds.height / 2
-        
-        for subview in canvasImageView.subviews {
+        let canvasBounds = canvasImageView.bounds
+
+        for subview in canvasImageView.subviews.reversed() {
             // Get current position relative to center
             let currentCenter = subview.center
             let relativeX = currentCenter.x - centerX
             let relativeY = currentCenter.y - centerY
-            
+
             // Apply 90-degree clockwise rotation: (x,y) -> (-y,x)
             let newRelativeX = -relativeY
             let newRelativeY = relativeX
-            
+
             // Set new position
-            subview.center = CGPoint(x: centerX + newRelativeX, y: centerY + newRelativeY)
-            
+            let newCenter = CGPoint(x: centerX + newRelativeX, y: centerY + newRelativeY)
+            subview.center = newCenter
+
             // Rotate the subview itself 90 degrees clockwise
             subview.transform = subview.transform.rotated(by: .pi / 2)
+
+            // Remove subviews that ended up completely outside bounds
+            let subviewFrame = CGRect(
+                x: newCenter.x - subview.bounds.width / 2,
+                y: newCenter.y - subview.bounds.height / 2,
+                width: subview.bounds.width,
+                height: subview.bounds.height
+            )
+            if !canvasBounds.intersects(subviewFrame) {
+                subview.removeFromSuperview()
+            }
         }
     }
     
@@ -127,7 +140,7 @@ extension PhotoEditorViewController {
         view.endEditing(true)
         doneButton.isHidden = true
         colorPickerView.isHidden = true
-        lineWidthSlider.isHidden = true
+        markerSizeCollectionView?.isHidden = true
         canvasImageView.isUserInteractionEnabled = true
         hideToolbar(hide: false)
         isDrawing = false
@@ -141,8 +154,11 @@ extension PhotoEditorViewController {
     
     @IBAction func shareButtonTapped(_ sender: UIButton) {
         let activity = UIActivityViewController(activityItems: [createHighResolutionImage()], applicationActivities: nil)
+        if let popover = activity.popoverPresentationController {
+            popover.sourceView = sender
+            popover.sourceRect = sender.bounds
+        }
         present(activity, animated: true, completion: nil)
-        
     }
     
     @IBAction func clearButtonTapped(_ sender: AnyObject) {

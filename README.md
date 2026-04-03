@@ -69,6 +69,10 @@ photoEditor.colors = [.red, .blue, .green, .yellow, .white, .black]
 // Optional: Set drawing line thickness (default is 5.0)
 photoEditor.drawLineWidth = 8.0
 
+// Optional: Show marker size picker in drawing mode (default is false)
+photoEditor.showMarkerSizePicker = true
+photoEditor.markerSizes = [5, 8, 12, 18]
+
 // Present the editor
 photoEditor.modalPresentationStyle = .fullScreen
 present(photoEditor, animated: true)
@@ -116,6 +120,8 @@ public enum control {
 | `colors` | `[UIColor]` | Colors available for drawing and text |
 | `hiddenControls` | `[control]` | Controls to hide from the toolbar |
 | `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`) |
+| `showMarkerSizePicker` | `Bool` | Show marker size picker in drawing mode (default: `false`) |
+| `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 4 entries. |
 
 ## Architecture
 

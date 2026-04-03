@@ -71,31 +71,30 @@ extension PhotoEditorViewController {
     func drawLineFrom(_ fromPoint: CGPoint, toPoint: CGPoint) {
         // Use display image size for drawing layer to match the visible image exactly
         let drawingSize = displayImageSize
-        let scale = displayToOriginalScale
         
         UIGraphicsBeginImageContextWithOptions(drawingSize, false, UIScreen.main.scale)
-        if let context = UIGraphicsGetCurrentContext() {
-            // Draw existing drawing layer
-            canvasImageView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
-            
-            // Calculate line width that will look good at both display and original resolution
-            let lineWidth: CGFloat = drawLineWidth / scale
-            
-            // Draw the new line
-            context.move(to: fromPoint)
-            context.addLine(to: toPoint)
-            context.setLineCap(.round)
-            context.setLineWidth(lineWidth)
-            context.setStrokeColor(drawColor.cgColor)
-            context.setBlendMode(.normal)
-            context.strokePath()
-            
-            canvasImageView.image = UIGraphicsGetImageFromCurrentImageContext()
+        guard let context = UIGraphicsGetCurrentContext() else {
             UIGraphicsEndImageContext()
-            
-            // Mark image as modified when drawing occurs
-            hasImageBeenModified = true
+            return
         }
+
+        // Draw existing drawing layer
+        canvasImageView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
+
+        // Draw the new line
+        context.move(to: fromPoint)
+        context.addLine(to: toPoint)
+        context.setLineCap(.round)
+        context.setLineWidth(drawLineWidth)
+        context.setStrokeColor(drawColor.cgColor)
+        context.setBlendMode(.normal)
+        context.strokePath()
+
+        canvasImageView.image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        // Mark image as modified when drawing occurs
+        hasImageBeenModified = true
     }
     
     // Helper function to check if a point is within the image bounds

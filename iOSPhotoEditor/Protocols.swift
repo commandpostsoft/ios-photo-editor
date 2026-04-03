@@ -52,3 +52,10 @@ protocol StickersViewControllerDelegate: AnyObject {
 protocol ColorDelegate: AnyObject {
     func didSelectColor(color: UIColor)
 }
+
+/**
+ - didSelectMarkerSize
+ */
+protocol MarkerSizeDelegate: AnyObject {
+    func didSelectMarkerSize(width: CGFloat)
+}

@@ -64,6 +64,19 @@ public final class PhotoEditorViewController: UIViewController {
      */
     public var drawLineWidth: CGFloat = 5.0
 
+    /**
+     Whether to show the marker size picker in drawing mode. Default is false.
+     When true and `markerSizes` is non-empty, a row of circles appears below the color picker.
+     */
+    public var showMarkerSizePicker: Bool = false
+
+    /**
+     Array of marker sizes for the marker size picker.
+     Up to 4 values, minimum value 1. The second size is auto-selected by default.
+     Default: [5, 8, 12, 18]
+     */
+    public var markerSizes: [CGFloat] = [5, 8, 12, 18]
+
     public weak var photoEditorDelegate: PhotoEditorDelegate?
     var colorsCollectionViewDelegate: ColorsCollectionViewDelegate!
     
@@ -78,9 +91,10 @@ public final class PhotoEditorViewController: UIViewController {
     var isDrawing: Bool = false
     var hasImageBeenModified: Bool = false
     
-    // UserDefaults keys for color persistence
+    // UserDefaults keys for persistence
     private let drawColorKey = "PhotoEditor.DrawColor"
     private let textColorKey = "PhotoEditor.TextColor"
+    private let markerSizeKey = "PhotoEditor.MarkerSize"
     var lastPoint: CGPoint!
     var swiped = false
     var lastPanPoint: CGPoint?
@@ -92,7 +106,8 @@ public final class PhotoEditorViewController: UIViewController {
     var isTyping: Bool = false
     
     
-    var lineWidthSlider: UISlider!
+    var markerSizeCollectionView: UICollectionView?
+    var markerSizeCollectionViewDelegate: MarkerSizeCollectionViewDelegate?
     var stickersViewController: StickersViewController!
 
     public init() {
@@ -109,11 +124,13 @@ public final class PhotoEditorViewController: UIViewController {
         super.loadView()
     }
     
-    override public func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        colorsCollectionViewDelegate.colorDelegate = nil
+    deinit {
+        colorsCollectionViewDelegate?.colorDelegate = nil
         colorsCollectionViewDelegate = nil
-        stickersViewController.stickersViewControllerDelegate = nil
+        markerSizeCollectionViewDelegate?.markerSizeDelegate = nil
+        markerSizeCollectionViewDelegate = nil
+        markerSizeCollectionView = nil
+        stickersViewController?.stickersViewControllerDelegate = nil
         stickersViewController = nil
     }
 
@@ -140,11 +157,11 @@ public final class PhotoEditorViewController: UIViewController {
                                                name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         
         
+        loadSavedColors()
         configureCollectionView()
-        setupLineWidthSlider()
+        setupMarkerSizePicker()
         stickersViewController = StickersViewController(nibName: "StickersViewController", bundle: Bundle.module)
         hideControls()
-        loadSavedColors()
     }
     
     override public func viewDidLayoutSubviews() {
@@ -252,31 +269,63 @@ public final class PhotoEditorViewController: UIViewController {
             forCellWithReuseIdentifier: "ColorCollectionViewCell")
     }
     
-    private func setupLineWidthSlider() {
-        lineWidthSlider = UISlider()
-        lineWidthSlider.minimumValue = 1.0
-        lineWidthSlider.maximumValue = 20.0
-        lineWidthSlider.value = Float(drawLineWidth)
-        lineWidthSlider.tintColor = .white
-        lineWidthSlider.translatesAutoresizingMaskIntoConstraints = false
-        lineWidthSlider.addTarget(self, action: #selector(lineWidthChanged(_:)), for: .valueChanged)
-        lineWidthSlider.isHidden = true
-        colorPickerView.addSubview(lineWidthSlider)
+    private func setupMarkerSizePicker() {
+        guard showMarkerSizePicker else { return }
+        // Filter out invalid values, enforce minimum of 1, and limit to 4
+        let sanitized = markerSizes.filter { $0.isFinite && $0 > 0 }.map { max($0, 1) }.sorted().prefix(4)
+        let sizes = Array(sanitized)
+        guard !sizes.isEmpty else { return }
 
-        // Expand colorPickerView height to fit the slider
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumInteritemSpacing = 0
+        layout.minimumLineSpacing = 0
+
+        let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        cv.translatesAutoresizingMaskIntoConstraints = false
+        cv.backgroundColor = .clear
+        cv.showsHorizontalScrollIndicator = false
+        cv.isHidden = true
+        cv.register(MarkerSizeCollectionViewCell.self, forCellWithReuseIdentifier: "MarkerSizeCollectionViewCell")
+
+        let delegate = MarkerSizeCollectionViewDelegate()
+        delegate.sizes = sizes
+        delegate.drawColor = drawColor
+        delegate.markerSizeDelegate = self
+
+        cv.delegate = delegate
+        cv.dataSource = delegate
+
+        colorPickerView.addSubview(cv)
+
+        // Expand colorPickerView height
         for constraint in colorPickerView.constraints where constraint.firstAttribute == .height {
             constraint.constant = 80
         }
 
         NSLayoutConstraint.activate([
-            lineWidthSlider.topAnchor.constraint(equalTo: colorsCollectionView.bottomAnchor, constant: 4),
-            lineWidthSlider.leadingAnchor.constraint(equalTo: colorPickerView.leadingAnchor),
-            lineWidthSlider.trailingAnchor.constraint(equalTo: colorPickerView.trailingAnchor)
+            cv.topAnchor.constraint(equalTo: colorsCollectionView.bottomAnchor, constant: 4),
+            cv.leadingAnchor.constraint(equalTo: colorPickerView.leadingAnchor),
+            cv.trailingAnchor.constraint(equalTo: colorPickerView.trailingAnchor),
+            cv.heightAnchor.constraint(equalToConstant: 40)
         ])
-    }
 
-    @objc private func lineWidthChanged(_ sender: UISlider) {
-        drawLineWidth = CGFloat(sender.value)
+        markerSizeCollectionView = cv
+        markerSizeCollectionViewDelegate = delegate
+
+        // Restore saved size, or default to second option (index 1)
+        let savedSize = UserDefaults.standard.double(forKey: markerSizeKey)
+        let selectedIndex: Int
+        if savedSize > 0, let idx = sizes.firstIndex(of: CGFloat(savedSize)) {
+            selectedIndex = idx
+        } else {
+            selectedIndex = sizes.count > 1 ? 1 : 0
+        }
+        drawLineWidth = sizes[selectedIndex]
+        DispatchQueue.main.async {
+            let indexPath = IndexPath(item: selectedIndex, section: 0)
+            cv.selectItem(at: indexPath, animated: false, scrollPosition: .centeredHorizontally)
+        }
     }
 
     func setImageView(image: UIImage) {
@@ -461,11 +510,21 @@ extension PhotoEditorViewController: ColorDelegate {
         if isDrawing {
             self.drawColor = color
             saveDrawColor()
+            if let cv = markerSizeCollectionView {
+                markerSizeCollectionViewDelegate?.reloadWithColor(color, collectionView: cv)
+            }
         } else if activeTextView != nil {
             activeTextView?.textColor = color
             textColor = color
             saveTextColor()
         }
+    }
+}
+
+extension PhotoEditorViewController: MarkerSizeDelegate {
+    func didSelectMarkerSize(width: CGFloat) {
+        drawLineWidth = width
+        UserDefaults.standard.set(Double(width), forKey: markerSizeKey)
     }
 }
 

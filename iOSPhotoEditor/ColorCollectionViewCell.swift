@@ -41,25 +41,47 @@ public class ColorCollectionViewCell: UICollectionViewCell {
         super.layoutSubviews()
         colorView.layer.cornerRadius = colorView.frame.width / 2
         colorView.clipsToBounds = true
+        updateBorder()
+    }
+
+    private func updateBorder() {
+        if isSelected {
+            colorView.layer.borderWidth = 3.0
+            colorView.layer.borderColor = contrastingBorderColor().cgColor
+        } else {
+            colorView.layer.borderWidth = 1.0
+            colorView.layer.borderColor = UIColor.white.cgColor
+        }
+    }
+
+    private func contrastingBorderColor() -> UIColor {
+        guard let bg = colorView.backgroundColor else { return .white }
+        var white: CGFloat = 0
+        bg.getWhite(&white, alpha: nil)
+        return white > 0.75 ? .darkGray : .white
+    }
+
+    public override func prepareForReuse() {
+        super.prepareForReuse()
+        colorView.transform = .identity
         colorView.layer.borderWidth = 1.0
         colorView.layer.borderColor = UIColor.white.cgColor
     }
-    
+
     public override var isSelected: Bool {
         didSet {
+            updateBorder()
             if isSelected {
-                let previouTransform =  colorView.transform
+                let previouTransform = colorView.transform
                 UIView.animate(withDuration: 0.2,
                                animations: {
                                 self.colorView.transform = self.colorView.transform.scaledBy(x: 1.3, y: 1.3)
                 },
                                completion: { _ in
                                 UIView.animate(withDuration: 0.2) {
-                                    self.colorView.transform  = previouTransform
+                                    self.colorView.transform = previouTransform
                                 }
                 })
-            } else {
-                // animate deselection
             }
         }
     }
