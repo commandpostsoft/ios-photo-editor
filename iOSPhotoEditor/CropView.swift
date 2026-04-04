@@ -116,7 +116,13 @@ open class CropView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, 
     fileprivate var interfaceOrientation = UIApplication.shared.statusBarOrientation
     fileprivate var resizing = false
     fileprivate var usingCustomImageView = false
-    fileprivate let MarginTop: CGFloat = 37.0
+    fileprivate var marginTop: CGFloat {
+        // Account for safe area + navigation bar so crop handles aren't hidden
+        let safeTop = safeAreaInsets.top
+        let safeBottom = safeAreaInsets.bottom
+        // Use at least 37pt, but prefer safe area + extra padding for nav bar
+        return max(37.0, safeTop + safeBottom + 10)
+    }
     fileprivate let MarginLeft: CGFloat = 20.0
 
     public override init(frame: CGRect) {
@@ -188,7 +194,7 @@ open class CropView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, 
 
         if imageView == nil {
             if interfaceOrientation.isPortrait {
-                insetRect = bounds.insetBy(dx: MarginLeft, dy: MarginTop)
+                insetRect = bounds.insetBy(dx: MarginLeft, dy: marginTop)
             } else {
                 insetRect = bounds.insetBy(dx: MarginLeft, dy: MarginLeft)
             }
@@ -199,7 +205,7 @@ open class CropView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, 
             setupImageView()
         } else if usingCustomImageView {
             if interfaceOrientation.isPortrait {
-                insetRect = bounds.insetBy(dx: MarginLeft, dy: MarginTop)
+                insetRect = bounds.insetBy(dx: MarginLeft, dy: marginTop)
             } else {
                 insetRect = bounds.insetBy(dx: MarginLeft, dy: MarginLeft)
             }
@@ -305,7 +311,7 @@ open class CropView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, 
     fileprivate func setupEditingRect() {
         let interfaceOrientation = UIApplication.shared.statusBarOrientation
         if interfaceOrientation.isPortrait {
-            editingRect = bounds.insetBy(dx: MarginLeft, dy: MarginTop)
+            editingRect = bounds.insetBy(dx: MarginLeft, dy: marginTop)
         } else {
             editingRect = bounds.insetBy(dx: MarginLeft, dy: MarginLeft)
         }

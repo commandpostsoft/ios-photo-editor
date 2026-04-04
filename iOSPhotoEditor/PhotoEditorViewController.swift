@@ -69,23 +69,10 @@ public final class PhotoEditorViewController: UIViewController {
     }
 
     /**
-     Whether to show undo/redo buttons. Default is true.
-     When true, undo/redo buttons appear at the top-left of the screen.
-     Use `maxUndoLevels` to configure how many undo steps are kept.
-     */
-    public var showUndoRedo: Bool = true
-
-    /**
      Maximum number of undo levels to keep. Default is 5.
      Higher values use more memory since each level stores a full editor snapshot.
      */
     public var maxUndoLevels: Int = 5
-
-    /**
-     Whether to show the marker size picker in drawing mode. Default is true.
-     When true and `markerSizes` is non-empty, a row of circles appears below the color picker.
-     */
-    public var showMarkerSizePicker: Bool = true
 
     /**
      Array of marker sizes for the marker size picker.
@@ -135,6 +122,17 @@ public final class PhotoEditorViewController: UIViewController {
     var markerSizeCollectionViewDelegate: MarkerSizeCollectionViewDelegate?
     var stickersViewController: StickersViewController!
 
+    var canvasZoomScale: CGFloat = 1.0
+    var canvasPanOffset: CGPoint = .zero
+    var canvasZoomPinchGesture: UIPinchGestureRecognizer?
+    var canvasZoomPanGesture: UIPanGestureRecognizer?
+    var canvasZoomSingleFingerPanGesture: UIPanGestureRecognizer?
+
+    var isPanZoomMode: Bool = true
+    var panGrabButton: UIButton?
+    var resetZoomButton: UIButton?
+    var modeBeforeActiveOperation: Bool = true
+
     var editorUndoManager = EditorUndoManager()
     private var undoButton: UIButton?
     private var redoButton: UIButton?
@@ -168,13 +166,16 @@ public final class PhotoEditorViewController: UIViewController {
         linePreviewLayer?.removeFromSuperlayer()
         linePreviewLayer = nil
         lineButton = nil
+        panGrabButton = nil
+        resetZoomButton = nil
     }
 
     override public func viewDidLoad() {
         super.viewDidLoad()
         
         setupIconFonts()
-        
+        setupButtonPressFeedback()
+
         deleteView.layer.cornerRadius = deleteView.bounds.height / 2
         deleteView.layer.borderWidth = 2.0
         deleteView.layer.borderColor = UIColor.white.cgColor
@@ -201,6 +202,8 @@ public final class PhotoEditorViewController: UIViewController {
         hideControls()
         setupDrawButtonLongPress()
         setupUndoRedoButtons()
+        setupCanvasZoomGestures()
+        setupPanGrabToggle()
         updateActionButtons()
     }
     
@@ -224,6 +227,9 @@ public final class PhotoEditorViewController: UIViewController {
             self.setImageView(image: image!)
             previousCanvasBounds = currentScreenBounds
         } else if previousCanvasBounds != CGSize.zero && currentScreenBounds != previousCanvasBounds {
+            // Reset zoom before rescaling to avoid layout conflicts with transforms
+            resetCanvasZoom(animated: false)
+            updatePanGrabUI()
             // Screen size changed, rescale everything
             rescaleCanvas(from: previousCanvasBounds, to: currentScreenBounds)
             previousCanvasBounds = currentScreenBounds
@@ -295,6 +301,43 @@ public final class PhotoEditorViewController: UIViewController {
         }
     }
     
+    private func setupButtonPressFeedback() {
+        let toolbarButtons: [UIButton?] = [
+            cropButton, stickerButton, drawButton, textButton, rotateButton,
+            saveButton, shareButton, clearButton, continueButton
+        ]
+        for button in toolbarButtons {
+            guard let btn = button else { continue }
+            addPressFeedback(to: btn)
+        }
+        // Cancel button found dynamically
+        if let cancelButton = topToolbar?.subviews.first(where: {
+            ($0 as? UIButton)?.actions(forTarget: self, forControlEvent: .touchUpInside)?
+                .contains("cancelButtonTapped:") ?? false
+        }) as? UIButton {
+            addPressFeedback(to: cancelButton)
+        }
+    }
+
+    private func addPressFeedback(to button: UIButton) {
+        button.addTarget(self, action: #selector(buttonTouchDown(_:)), for: .touchDown)
+        button.addTarget(self, action: #selector(buttonTouchUp(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    }
+
+    @objc private func buttonTouchDown(_ sender: UIButton) {
+        UIView.animate(withDuration: 0.1, delay: 0, options: [.allowUserInteraction, .curveEaseIn]) {
+            sender.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+            sender.alpha = 0.6
+        }
+    }
+
+    @objc private func buttonTouchUp(_ sender: UIButton) {
+        UIView.animate(withDuration: 0.15, delay: 0, options: [.allowUserInteraction, .curveEaseOut]) {
+            sender.transform = .identity
+            sender.alpha = sender.isEnabled ? 1.0 : 0.3
+        }
+    }
+
     func configureCollectionView() {
         let layout: UICollectionViewFlowLayout = UICollectionViewFlowLayout()
         layout.itemSize = CGSize(width: 30, height: 30)
@@ -316,7 +359,7 @@ public final class PhotoEditorViewController: UIViewController {
     }
     
     private func setupMarkerSizePicker() {
-        guard showMarkerSizePicker else { return }
+        guard !hiddenControls.contains(.markerSize) else { return }
         // Filter out invalid values, enforce minimum of 1, and limit to 4
         let sanitized = markerSizes.filter { $0.isFinite && $0 > 0 }.map { max($0, 1) }.sorted().prefix(4)
         let sizes = Array(sanitized)
@@ -381,7 +424,13 @@ public final class PhotoEditorViewController: UIViewController {
         
         // Fit image to screen bounds (width or height, whichever fits best)
         let screenBounds = view.bounds.size
-        displayImageSize = image.suitableSizeWithinBounds(screenBounds)
+        let rawSize = image.suitableSizeWithinBounds(screenBounds)
+        // Pixel-snap to prevent cumulative resampling drift in drawLineFrom bitmap contexts
+        let screenScale = UIScreen.main.scale
+        displayImageSize = CGSize(
+            width: round(rawSize.width * screenScale) / screenScale,
+            height: round(rawSize.height * screenScale) / screenScale
+        )
         
         // Calculate scale factor from display to current image size
         displayToOriginalScale = image.size.width / displayImageSize.width
@@ -424,23 +473,23 @@ public final class PhotoEditorViewController: UIViewController {
         guard isDrawing else { return }
         isDrawing = false
         pickerHiddenWhileDrawing = false
-        canvasImageView.isUserInteractionEnabled = true
         colorPickerView.isHidden = true
         markerSizeCollectionView?.isHidden = true
         showDrawButtonHighlight(false)
+        restorePreviousMode()
     }
 
     func exitLineDrawingMode() {
         guard isLineDrawing else { return }
         isLineDrawing = false
         pickerHiddenWhileDrawing = false
-        canvasImageView.isUserInteractionEnabled = true
         colorPickerView.isHidden = true
         markerSizeCollectionView?.isHidden = true
         showLineButtonHighlight(false)
         linePreviewLayer?.removeFromSuperlayer()
         linePreviewLayer = nil
         lineStartCanvasPoint = nil
+        restorePreviousMode()
     }
 
     private let drawHighlightTag = 9999
@@ -607,10 +656,8 @@ public final class PhotoEditorViewController: UIViewController {
             
             context.translateBy(x: originalCenterX, y: originalCenterY)
             context.scaleBy(x: scale, y: scale)
-            context.translateBy(x: -subview.bounds.width/2, y: -subview.bounds.height/2)
-            
-            // Apply the subview's transform
             context.concatenate(subview.transform)
+            context.translateBy(x: -subview.bounds.width/2, y: -subview.bounds.height/2)
             
             // Render the subview
             subview.layer.render(in: context)
@@ -629,8 +676,13 @@ public final class PhotoEditorViewController: UIViewController {
     private func rescaleCanvas(from oldBounds: CGSize, to newBounds: CGSize) {
         guard let currentImage = self.image else { return }
         
-        // Calculate new display size for the image
-        let newDisplaySize = currentImage.suitableSizeWithinBounds(newBounds)
+        // Calculate new display size for the image (pixel-snapped to prevent drift)
+        let rawDisplaySize = currentImage.suitableSizeWithinBounds(newBounds)
+        let screenScale = UIScreen.main.scale
+        let newDisplaySize = CGSize(
+            width: round(rawDisplaySize.width * screenScale) / screenScale,
+            height: round(rawDisplaySize.height * screenScale) / screenScale
+        )
         
         // Calculate scaling factors
         let scaleX = newDisplaySize.width / displayImageSize.width
@@ -686,7 +738,7 @@ public final class PhotoEditorViewController: UIViewController {
     // MARK: - Undo/Redo
 
     private func setupUndoRedoButtons() {
-        guard showUndoRedo else { return }
+        guard !hiddenControls.contains(.undoRedo) else { return }
         editorUndoManager.maxUndoLevels = max(1, maxUndoLevels)
 
         let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
@@ -741,7 +793,7 @@ public final class PhotoEditorViewController: UIViewController {
     }
 
     func saveSnapshot() {
-        guard showUndoRedo else { return }
+        guard !hiddenControls.contains(.undoRedo) else { return }
         let snapshot = createSnapshot()
         editorUndoManager.pushUndo(snapshot)
         updateUndoRedoButtons()
@@ -749,7 +801,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     /// Stage a snapshot for drawing — only committed if a stroke actually occurs.
     func savePendingDrawSnapshot() {
-        guard showUndoRedo, pendingDrawSnapshot == nil else { return }
+        guard !hiddenControls.contains(.undoRedo), pendingDrawSnapshot == nil else { return }
         pendingDrawSnapshot = createSnapshot()
     }
 

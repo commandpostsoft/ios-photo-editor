@@ -16,11 +16,12 @@ class StickersViewController: UIViewController, UIGestureRecognizerDelegate {
     @IBOutlet weak var pageControl: UIPageControl!
     
     var stickerCollectionView: UICollectionView?
-    var emojiCollectionView: UICollectionView!
-    
-    var emojisDelegate: EmojisCollectionViewDelegate!
-    
+    var emojiCollectionView: UICollectionView?
+
+    var emojisDelegate: EmojisCollectionViewDelegate?
+
     var stickers : [UIImage] = []
+    var hideEmojis: Bool = false
     weak var stickersViewControllerDelegate : StickersViewControllerDelegate?
     
     let screenSize = UIScreen.main.bounds.size
@@ -35,14 +36,16 @@ class StickersViewController: UIViewController, UIGestureRecognizerDelegate {
         super.viewDidLoad()
 
         let hasStickers = !stickers.isEmpty
-        configureCollectionViews(showStickers: hasStickers)
+        let showEmojis = !hideEmojis
+        configureCollectionViews(showStickers: hasStickers, showEmojis: showEmojis)
 
-        if hasStickers {
-            scrollView.contentSize = CGSize(width: 2.0 * screenSize.width,
+        let pageCount = [hasStickers, showEmojis].filter { $0 }.count
+        if pageCount > 1 {
+            scrollView.contentSize = CGSize(width: CGFloat(pageCount) * screenSize.width,
                                             height: scrollView.frame.size.height)
             scrollView.isPagingEnabled = true
             scrollView.delegate = self
-            pageControl.numberOfPages = 2
+            pageControl.numberOfPages = pageCount
         } else {
             scrollView.contentSize = CGSize(width: screenSize.width,
                                             height: scrollView.frame.size.height)
@@ -56,7 +59,7 @@ class StickersViewController: UIViewController, UIGestureRecognizerDelegate {
         view.addGestureRecognizer(gesture)
     }
     
-    func configureCollectionViews(showStickers: Bool) {
+    func configureCollectionViews(showStickers: Bool, showEmojis: Bool) {
 
         if showStickers {
             let frame = CGRect(x: 0,
@@ -82,28 +85,30 @@ class StickersViewController: UIViewController, UIGestureRecognizerDelegate {
 
         //-----------------------------------
 
-        let emojisX: CGFloat = showStickers ? scrollView.frame.size.width : 0
-        let emojisFrame = CGRect(x: emojisX,
-                                 y: 0,
-                                 width: UIScreen.main.bounds.width,
-                                 height: view.frame.height - 40)
-        
-        let emojislayout: UICollectionViewFlowLayout = UICollectionViewFlowLayout()
-        emojislayout.sectionInset = UIEdgeInsets(top: 20, left: 10, bottom: 10, right: 10)
-        emojislayout.itemSize = CGSize(width: 70, height: 70)
-        
-        emojiCollectionView = UICollectionView(frame: emojisFrame, collectionViewLayout: emojislayout)
-        emojiCollectionView.backgroundColor = .clear
-        scrollView.addSubview(emojiCollectionView)
-        emojisDelegate = EmojisCollectionViewDelegate()
-        emojisDelegate.stickersViewControllerDelegate = stickersViewControllerDelegate
-        emojiCollectionView.delegate = emojisDelegate
-        emojiCollectionView.dataSource = emojisDelegate
-        
-        emojiCollectionView.register(
-            UINib(nibName: "EmojiCollectionViewCell", bundle: Bundle.module),
-            forCellWithReuseIdentifier: "EmojiCollectionViewCell")
-        
+        if showEmojis {
+            let emojisX: CGFloat = showStickers ? scrollView.frame.size.width : 0
+            let emojisFrame = CGRect(x: emojisX,
+                                     y: 0,
+                                     width: UIScreen.main.bounds.width,
+                                     height: view.frame.height - 40)
+
+            let emojislayout: UICollectionViewFlowLayout = UICollectionViewFlowLayout()
+            emojislayout.sectionInset = UIEdgeInsets(top: 20, left: 10, bottom: 10, right: 10)
+            emojislayout.itemSize = CGSize(width: 90, height: 90)
+
+            let cv = UICollectionView(frame: emojisFrame, collectionViewLayout: emojislayout)
+            cv.backgroundColor = .clear
+            scrollView.addSubview(cv)
+            let delegate = EmojisCollectionViewDelegate()
+            delegate.stickersViewControllerDelegate = stickersViewControllerDelegate
+            cv.delegate = delegate
+            cv.dataSource = delegate
+            cv.register(
+                UINib(nibName: "EmojiCollectionViewCell", bundle: Bundle.module),
+                forCellWithReuseIdentifier: "EmojiCollectionViewCell")
+            emojiCollectionView = cv
+            emojisDelegate = delegate
+        }
     }
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -133,13 +138,13 @@ class StickersViewController: UIViewController, UIGestureRecognizerDelegate {
                                       height: view.frame.height - 40)
 
         let emojisX: CGFloat = hasStickers ? scrollView.frame.size.width : 0
-        emojiCollectionView.frame = CGRect(x: emojisX,
-                                           y: 0,
-                                           width: UIScreen.main.bounds.width,
-                                           height: view.frame.height - 40)
+        emojiCollectionView?.frame = CGRect(x: emojisX,
+                                            y: 0,
+                                            width: UIScreen.main.bounds.width,
+                                            height: view.frame.height - 40)
 
-        let pages: CGFloat = hasStickers ? 2.0 : 1.0
-        scrollView.contentSize = CGSize(width: pages * screenSize.width,
+        let pageCount = [hasStickers, emojiCollectionView != nil].filter { $0 }.count
+        scrollView.contentSize = CGSize(width: CGFloat(max(pageCount, 1)) * screenSize.width,
                                         height: scrollView.frame.size.height)
     }
     

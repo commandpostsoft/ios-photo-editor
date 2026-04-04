@@ -20,6 +20,10 @@ public enum control {
     case save
     case share
     case clear
+    case panZoom
+    case undoRedo
+    case markerSize
+    case emoji
 }
 
 extension PhotoEditorViewController {
@@ -47,9 +51,14 @@ extension PhotoEditorViewController {
     @IBAction func cropButtonTapped(_ sender: UIButton) {
         exitDrawingMode()
         exitLineDrawingMode()
+        let initialCropRect = visibleImageCropRect()
+        resetCanvasZoom(animated: false)
         let controller = CropViewController()
         controller.delegate = self
         controller.image = image
+        if initialCropRect != .zero {
+            controller.imageCropRect = initialCropRect
+        }
         let navController = UINavigationController(rootViewController: controller)
 
         // Dark navigation bar appearance
@@ -86,6 +95,8 @@ extension PhotoEditorViewController {
             exitLineDrawingMode()
         } else {
             exitDrawingMode()
+            modeBeforeActiveOperation = isPanZoomMode
+            disableZoomGestures()
             isLineDrawing = true
             canvasImageView.isUserInteractionEnabled = false
             let showPicker = !pickerHiddenWhileDrawing
@@ -100,6 +111,8 @@ extension PhotoEditorViewController {
         if isDrawing {
             exitDrawingMode()
         } else {
+            modeBeforeActiveOperation = isPanZoomMode
+            disableZoomGestures()
             isDrawing = true
             canvasImageView.isUserInteractionEnabled = false
             let showPicker = !pickerHiddenWhileDrawing
@@ -112,10 +125,17 @@ extension PhotoEditorViewController {
     @IBAction func textButtonTapped(_ sender: Any) {
         exitDrawingMode()
         exitLineDrawingMode()
+        modeBeforeActiveOperation = isPanZoomMode
+        disableZoomGestures()
+        canvasImageView.isUserInteractionEnabled = false
         isTyping = true
         setTopToolbarItemsHidden(true)
-        let textView = UITextView(frame: CGRect(x: 0, y: canvasImageView.center.y,
-                                                width: UIScreen.main.bounds.width, height: 30))
+        // Convert the visible screen center to canvas coordinates so text appears where the user is looking
+        let screenCenter = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        let canvasCenter = view.convert(screenCenter, to: canvasImageView)
+        let textView = UITextView(frame: CGRect(x: canvasCenter.x - view.bounds.width / 2,
+                                                y: canvasCenter.y,
+                                                width: view.bounds.width, height: 30))
         
         textView.textAlignment = .center
         textView.font = UIFont(name: "Helvetica", size: 30)
@@ -136,6 +156,7 @@ extension PhotoEditorViewController {
     @IBAction func rotateButtonTapped(_ sender: Any) {
         exitDrawingMode()
         exitLineDrawingMode()
+        resetCanvasZoom(animated: false)
         guard let image = self.image else { return }
         saveSnapshot()
 
@@ -158,36 +179,36 @@ extension PhotoEditorViewController {
             canvasImageView.image = rotatedDrawing
         }
 
-        // Rotate and reposition all subviews (text, stickers)
-        let centerX = canvasImageView.bounds.width / 2
-        let centerY = canvasImageView.bounds.height / 2
-        let canvasBounds = canvasImageView.bounds
+        // Rotate subview positions around the image center (not canvas center)
+        let imageRect = getImageBoundsInCanvas()
+        let imgCenterX = imageRect.midX
+        let imgCenterY = imageRect.midY
 
         for subview in canvasImageView.subviews.reversed() {
-            // Get current position relative to center
+            // Get current position relative to image center
             let currentCenter = subview.center
-            let relativeX = currentCenter.x - centerX
-            let relativeY = currentCenter.y - centerY
+            let relativeX = currentCenter.x - imgCenterX
+            let relativeY = currentCenter.y - imgCenterY
 
             // Apply 90-degree clockwise rotation: (x,y) -> (-y,x)
             let newRelativeX = -relativeY
             let newRelativeY = relativeX
 
-            // Set new position
-            let newCenter = CGPoint(x: centerX + newRelativeX, y: centerY + newRelativeY)
+            // New position relative to image center
+            let newCenter = CGPoint(x: imgCenterX + newRelativeX, y: imgCenterY + newRelativeY)
             subview.center = newCenter
 
             // Rotate the subview itself 90 degrees clockwise
             subview.transform = subview.transform.rotated(by: .pi / 2)
 
-            // Remove subviews that ended up completely outside bounds
+            // Remove subviews that ended up completely outside canvas bounds
             let subviewFrame = CGRect(
                 x: newCenter.x - subview.bounds.width / 2,
                 y: newCenter.y - subview.bounds.height / 2,
                 width: subview.bounds.width,
                 height: subview.bounds.height
             )
-            if !canvasBounds.intersects(subviewFrame) {
+            if !canvasImageView.bounds.intersects(subviewFrame) {
                 subview.removeFromSuperview()
             }
         }
@@ -196,13 +217,20 @@ extension PhotoEditorViewController {
     @IBAction func doneButtonTapped(_ sender: Any) {
         view.endEditing(true)
         doneButton.isHidden = true
+        let wasDrawing = isDrawing
+        let wasLineDrawing = isLineDrawing
         exitDrawingMode()
         exitLineDrawingMode()
         colorPickerView.isHidden = true
         markerSizeCollectionView?.isHidden = true
-        canvasImageView.isUserInteractionEnabled = true
         setTopToolbarItemsHidden(false)
         hideToolbar(hide: false)
+        // If neither drawing mode was active (e.g. text editing),
+        // exitDrawingMode/exitLineDrawingMode won't restore the mode,
+        // so do it explicitly.
+        if !wasDrawing && !wasLineDrawing {
+            restorePreviousMode()
+        }
     }
     
     //MARK: Bottom Toolbar
@@ -210,12 +238,14 @@ extension PhotoEditorViewController {
     @IBAction func saveButtonTapped(_ sender: AnyObject) {
         exitDrawingMode()
         exitLineDrawingMode()
+        resetCanvasZoom(animated: false)
         UIImageWriteToSavedPhotosAlbum(createHighResolutionImage(),self, #selector(PhotoEditorViewController.image(_:withPotentialError:contextInfo:)), nil)
     }
 
     @IBAction func shareButtonTapped(_ sender: UIButton) {
         exitDrawingMode()
         exitLineDrawingMode()
+        resetCanvasZoom(animated: false)
         let activity = UIActivityViewController(activityItems: [createHighResolutionImage()], applicationActivities: nil)
         if let popover = activity.popoverPresentationController {
             popover.sourceView = sender
@@ -251,20 +281,22 @@ extension PhotoEditorViewController {
     @IBAction func continueButtonPressed(_ sender: Any) {
         exitDrawingMode()
         exitLineDrawingMode()
+        resetCanvasZoom(animated: false)
         if hasImageBeenModified {
             // Image was modified, process and return high-resolution edited image
             let img = createHighResolutionImage()
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 do {
-                    try await photoEditorDelegate?.doneEditing(image: img)
+                    try await self?.photoEditorDelegate?.doneEditing(image: img)
                 } catch {
                     print("Error in doneEditing: \(error)")
                 }
+                self?.dismiss(animated: true, completion: nil)
             }
+        } else {
+            // If no changes made, just dismiss without calling delegate (like cancel/close)
+            self.dismiss(animated: true, completion: nil)
         }
-        // If no changes made, just dismiss without calling delegate (like cancel/close)
-        
-        self.dismiss(animated: true, completion: nil)
     }
 
     //MAKR: helper methods
@@ -297,6 +329,11 @@ extension PhotoEditorViewController {
                 textButton.isHidden = true
             case .rotate:
                 rotateButton.isHidden = true
+            case .panZoom:
+                panGrabButton?.isHidden = true
+                resetZoomButton?.isHidden = true
+            case .undoRedo, .markerSize, .emoji:
+                break
             }
         }
     }

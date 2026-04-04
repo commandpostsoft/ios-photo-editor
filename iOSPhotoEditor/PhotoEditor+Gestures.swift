@@ -119,7 +119,18 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
         return true
     }
     
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer == canvasZoomSingleFingerPanGesture {
+            return isPanZoomMode && canvasZoomScale > 1.0 && !isDrawing && !isLineDrawing
+        }
+        return true
+    }
+
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if (gestureRecognizer == canvasZoomPanGesture || gestureRecognizer == canvasZoomSingleFingerPanGesture) &&
+           otherGestureRecognizer is UIScreenEdgePanGestureRecognizer {
+            return true
+        }
         return false
     }
     

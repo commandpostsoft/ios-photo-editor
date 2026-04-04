@@ -51,6 +51,9 @@ extension PhotoEditorViewController: UITextViewDelegate {
         if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             // Remove empty text views to avoid invisible clutter
             textView.removeFromSuperview()
+            isTyping = false
+            setTopToolbarItemsHidden(false)
+            restorePreviousMode()
         } else {
             hasImageBeenModified = true
             UIView.animate(withDuration: 0.3,
@@ -58,10 +61,11 @@ extension PhotoEditorViewController: UITextViewDelegate {
                             textView.transform = savedTransform
                             textView.center = savedCenter
             }, completion: nil)
+            isTyping = false
+            setTopToolbarItemsHidden(false)
+            // Switch to grab mode so user can immediately reposition the text
+            autoSwitchAfterContentPlacement()
         }
-
-        isTyping = false
-        setTopToolbarItemsHidden(false)
     }
     
 }

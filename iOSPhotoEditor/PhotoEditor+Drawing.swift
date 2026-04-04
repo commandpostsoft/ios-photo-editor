@@ -111,7 +111,7 @@ extension PhotoEditorViewController {
         lastPoint = nil
         swiped = false
     }
-    
+
     override public func touchesCancelled(_ touches: Set<UITouch>,
                                           with event: UIEvent?) {
         // Clean up freehand drawing state
