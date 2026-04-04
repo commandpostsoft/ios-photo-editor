@@ -68,6 +68,11 @@ extension PhotoEditorViewController {
         lastPoint = nil
         swiped = false
     }
+
+    override public func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        lastPoint = nil
+        swiped = false
+    }
     
     func drawLineFrom(_ fromPoint: CGPoint, toPoint: CGPoint) {
         // Use display image size for drawing layer to match the visible image exactly

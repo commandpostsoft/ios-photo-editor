@@ -127,6 +127,11 @@ public final class PhotoEditorViewController: UIViewController {
     var markerSizeCollectionViewDelegate: MarkerSizeCollectionViewDelegate?
     var stickersViewController: StickersViewController!
 
+    var canvasZoomScale: CGFloat = 1.0
+    var canvasPanOffset: CGPoint = .zero
+    var canvasZoomPinchGesture: UIPinchGestureRecognizer?
+    var canvasZoomPanGesture: UIPanGestureRecognizer?
+
     var editorUndoManager = EditorUndoManager()
     private var undoButton: UIButton?
     private var redoButton: UIButton?
@@ -189,6 +194,7 @@ public final class PhotoEditorViewController: UIViewController {
         hideControls()
         setupDrawButtonLongPress()
         setupUndoRedoButtons()
+        setupCanvasZoomGestures()
         updateActionButtons()
     }
     
@@ -206,6 +212,8 @@ public final class PhotoEditorViewController: UIViewController {
             self.setImageView(image: image!)
             previousCanvasBounds = currentScreenBounds
         } else if previousCanvasBounds != CGSize.zero && currentScreenBounds != previousCanvasBounds {
+            // Reset zoom before rescaling to avoid layout conflicts with transforms
+            resetCanvasZoom(animated: false)
             // Screen size changed, rescale everything
             rescaleCanvas(from: previousCanvasBounds, to: currentScreenBounds)
             previousCanvasBounds = currentScreenBounds
@@ -390,6 +398,7 @@ public final class PhotoEditorViewController: UIViewController {
         colorPickerView.isHidden = true
         markerSizeCollectionView?.isHidden = true
         showDrawButtonHighlight(false)
+        resetCanvasZoom(animated: true)
     }
 
     private let drawHighlightTag = 9999
