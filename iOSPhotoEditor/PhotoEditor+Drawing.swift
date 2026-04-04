@@ -139,7 +139,7 @@ extension PhotoEditorViewController {
         }
 
         // Draw existing drawing layer
-        canvasImageView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
+        drawingOverlayView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
 
         // Draw the new line
         context.move(to: fromPoint)
@@ -150,7 +150,7 @@ extension PhotoEditorViewController {
         context.setBlendMode(.normal)
         context.strokePath()
 
-        canvasImageView.image = UIGraphicsGetImageFromCurrentImageContext()
+        drawingOverlayView.image = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
 
         // Mark image as modified when drawing occurs
@@ -197,6 +197,7 @@ extension PhotoEditorViewController {
         imageView.contentMode = .scaleToFill
         imageView.tag = lineSubviewTag
         canvasImageView.addSubview(imageView)
+        ensureDrawingOverlayOnTop()
         addGestures(view: imageView)
         hasImageBeenModified = true
     }

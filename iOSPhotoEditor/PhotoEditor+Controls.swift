@@ -149,6 +149,7 @@ extension PhotoEditorViewController {
         textView.isScrollEnabled = false
         textView.delegate = self
         self.canvasImageView.addSubview(textView)
+        ensureDrawingOverlayOnTop()
         addGestures(view: textView)
         textView.becomeFirstResponder()
     }    
@@ -164,51 +165,81 @@ extension PhotoEditorViewController {
         let rotatedImage = image.rotate(radians: .pi / 2)
         
         // Rotate the drawing layer as well
-        rotateDrawingLayer()
-        
+        rotateDrawingLayer(newImage: rotatedImage)
+
         // Update the image view
         setImageView(image: rotatedImage)
         self.image = rotatedImage
         hasImageBeenModified = true
     }
     
-    private func rotateDrawingLayer() {
-        // Rotate the drawing image if it exists
-        if let drawingImage = canvasImageView.image {
-            let rotatedDrawing = drawingImage.rotate(radians: .pi / 2)
-            canvasImageView.image = rotatedDrawing
+    private func rotateDrawingLayer(newImage: UIImage) {
+        // Rotate the drawing bitmap
+        if let drawingImage = drawingOverlayView.image {
+            drawingOverlayView.image = drawingImage.rotate(radians: .pi / 2)
         }
 
-        // Rotate subview positions around the image center (not canvas center)
-        let imageRect = getImageBoundsInCanvas()
-        let imgCenterX = imageRect.midX
-        let imgCenterY = imageRect.midY
+        // OLD image rect (before setImageView updates displayImageSize)
+        let oldImageRect = getImageBoundsInCanvas()
 
-        for subview in canvasImageView.subviews.reversed() {
-            // Get current position relative to image center
-            let currentCenter = subview.center
-            let relativeX = currentCenter.x - imgCenterX
-            let relativeY = currentCenter.y - imgCenterY
+        // Compute NEW display size using same formula as setImageView()
+        let screenBounds = view.bounds.size
+        let rawSize = newImage.suitableSizeWithinBounds(screenBounds)
+        let screenScale = UIScreen.main.scale
+        let newDisplaySize = CGSize(
+            width: round(rawSize.width * screenScale) / screenScale,
+            height: round(rawSize.height * screenScale) / screenScale
+        )
 
-            // Apply 90-degree clockwise rotation: (x,y) -> (-y,x)
-            let newRelativeX = -relativeY
-            let newRelativeY = relativeX
+        // After setImageView, canvas resizes: width stays same, height = newDisplaySize.height.
+        // Use the NEW canvas size (not the old canvasImageView.bounds) to avoid a spurious
+        // centering offset that compounds through rotations.
+        let newCanvasSize = CGSize(width: canvasImageView.bounds.width, height: newDisplaySize.height)
+        let newImageRect = CGRect(
+            x: (newCanvasSize.width - newDisplaySize.width) / 2,
+            y: (newCanvasSize.height - newDisplaySize.height) / 2,
+            width: newDisplaySize.width,
+            height: newDisplaySize.height
+        )
 
-            // New position relative to image center
-            let newCenter = CGPoint(x: imgCenterX + newRelativeX, y: imgCenterY + newRelativeY)
+        // Scale factor to preserve proportional sticker coverage across aspect ratio changes
+        guard oldImageRect.height > 0 && oldImageRect.width > 0 else { return }
+        let scaleFactor = newImageRect.width / oldImageRect.height
+
+        // Reposition subviews via normalized coordinates
+        for subview in contentSubviews.reversed() {
+            // To 0..1 in OLD rect
+            let relX = (subview.center.x - oldImageRect.origin.x) / oldImageRect.width
+            let relY = (subview.center.y - oldImageRect.origin.y) / oldImageRect.height
+
+            // 90° CW in normalized space
+            let newRelX = 1.0 - relY
+            let newRelY = relX
+
+            // Back to canvas coords via NEW rect
+            let newCenter = CGPoint(
+                x: newImageRect.origin.x + newRelX * newImageRect.width,
+                y: newImageRect.origin.y + newRelY * newImageRect.height
+            )
             subview.center = newCenter
 
-            // Rotate the subview itself 90 degrees clockwise
-            subview.transform = subview.transform.rotated(by: .pi / 2)
+            // Text views use rotation-only transforms (scale via font size)
+            if let textView = subview as? UITextView, let currentFont = textView.font {
+                let newSize = min(max(currentFont.pointSize * scaleFactor, 8), 90)
+                textView.font = UIFont(name: currentFont.fontName, size: newSize)
+                let sizeToFit = textView.sizeThatFits(CGSize(width: UIScreen.main.bounds.size.width,
+                                                             height: CGFloat.greatestFiniteMagnitude))
+                textView.bounds.size = CGSize(width: textView.intrinsicContentSize.width,
+                                              height: sizeToFit.height)
+                subview.transform = subview.transform.rotated(by: .pi / 2)
+            } else {
+                subview.transform = subview.transform
+                    .scaledBy(x: scaleFactor, y: scaleFactor)
+                    .rotated(by: .pi / 2)
+            }
 
-            // Remove subviews that ended up completely outside canvas bounds
-            let subviewFrame = CGRect(
-                x: newCenter.x - subview.bounds.width / 2,
-                y: newCenter.y - subview.bounds.height / 2,
-                width: subview.bounds.width,
-                height: subview.bounds.height
-            )
-            if !canvasImageView.bounds.intersects(subviewFrame) {
+            // Clip subviews completely outside the NEW canvas bounds
+            if !CGRect(origin: .zero, size: newCanvasSize).intersects(subview.frame) {
                 subview.removeFromSuperview()
             }
         }
@@ -265,8 +296,8 @@ extension PhotoEditorViewController {
         alert.addAction(UIAlertAction(title: "Clear", style: .destructive) { [weak self] _ in
             guard let self = self else { return }
             self.saveSnapshot()
-            self.canvasImageView.image = nil
-            for subview in self.canvasImageView.subviews {
+            self.drawingOverlayView.image = nil
+            for subview in self.contentSubviews {
                 subview.removeFromSuperview()
             }
             if let originalImage = self.originalImage {

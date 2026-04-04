@@ -59,12 +59,13 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
 
         view.center = canvasImageView.center
         self.canvasImageView.addSubview(view)
+        ensureDrawingOverlayOnTop()
         //Gestures
         addGestures(view: view)
         hasImageBeenModified = true
         autoSwitchAfterContentPlacement()
     }
-    
+
     func didSelectImage(image: UIImage) {
         self.removeStickersView()
         saveSnapshot()
@@ -75,6 +76,7 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
         imageView.center = canvasImageView.center
 
         self.canvasImageView.addSubview(imageView)
+        ensureDrawingOverlayOnTop()
         //Gestures
         addGestures(view: imageView)
         hasImageBeenModified = true

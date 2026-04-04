@@ -26,29 +26,29 @@ extension PhotoEditorViewController: CropViewControllerDelegate {
     
     private func cropDrawingLayer(transform: CGAffineTransform, cropRect: CGRect) {
         // Crop the drawing image if it exists
-        if let drawingImage = canvasImageView.image, let currentImage = self.image {
+        if let drawingImage = drawingOverlayView.image, let currentImage = self.image {
             // Scale the crop rect from original image coordinates to drawing layer coordinates
             let scaleX = drawingImage.size.width / currentImage.size.width
             let scaleY = drawingImage.size.height / currentImage.size.height
-            
+
             let scaledCropRect = CGRect(
                 x: cropRect.origin.x * scaleX,
                 y: cropRect.origin.y * scaleY,
                 width: cropRect.size.width * scaleX,
                 height: cropRect.size.height * scaleY
             )
-            
+
             let croppedDrawing = drawingImage.rotatedImageWithTransform(transform, croppedToRect: scaledCropRect)
-            canvasImageView.image = croppedDrawing
+            drawingOverlayView.image = croppedDrawing
         }
-        
+
         // Transform and crop subviews (text, stickers)
         let scaleX = cropRect.width / canvasImageView.bounds.width
         let scaleY = cropRect.height / canvasImageView.bounds.height
         let offsetX = cropRect.origin.x
         let offsetY = cropRect.origin.y
-        
-        for subview in canvasImageView.subviews.reversed() {
+
+        for subview in contentSubviews.reversed() {
             // Apply the crop transform to the subview
             let currentCenter = subview.center
             

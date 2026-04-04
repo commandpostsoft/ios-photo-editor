@@ -18,6 +18,7 @@ public final class PhotoEditorViewController: UIViewController {
     @IBOutlet weak var imageViewHeightConstraint: NSLayoutConstraint!
     //To hold the drawings and stickers
     @IBOutlet weak var canvasImageView: UIImageView!
+    var drawingOverlayView: UIImageView!
 
     @IBOutlet weak var topToolbar: UIView!
     @IBOutlet weak var bottomToolbar: UIView!
@@ -168,6 +169,8 @@ public final class PhotoEditorViewController: UIViewController {
         lineButton = nil
         panGrabButton = nil
         resetZoomButton = nil
+        drawingOverlayView?.image = nil
+        drawingOverlayView = nil
     }
 
     override public func viewDidLoad() {
@@ -205,6 +208,13 @@ public final class PhotoEditorViewController: UIViewController {
         setupCanvasZoomGestures()
         setupPanGrabToggle()
         updateActionButtons()
+
+        drawingOverlayView = UIImageView()
+        drawingOverlayView.contentMode = .scaleToFill
+        drawingOverlayView.isUserInteractionEnabled = false
+        drawingOverlayView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        drawingOverlayView.frame = canvasImageView.bounds
+        canvasImageView.addSubview(drawingOverlayView)
     }
     
     override public func didReceiveMemoryWarning() {
@@ -360,8 +370,8 @@ public final class PhotoEditorViewController: UIViewController {
     
     private func setupMarkerSizePicker() {
         guard !hiddenControls.contains(.markerSize) else { return }
-        // Filter out invalid values, enforce minimum of 1, and limit to 4
-        let sanitized = markerSizes.filter { $0.isFinite && $0 > 0 }.map { max($0, 1) }.sorted().prefix(4)
+        // Filter out invalid values, enforce minimum of 1, and limit to 5
+        let sanitized = markerSizes.filter { $0.isFinite && $0 > 0 }.map { max($0, 1) }.sorted().prefix(5)
         let sizes = Array(sanitized)
         guard !sizes.isEmpty else { return }
 
@@ -496,6 +506,14 @@ public final class PhotoEditorViewController: UIViewController {
     private let lineHighlightTag = 9998
     let lineSubviewTag = 8888
 
+    var contentSubviews: [UIView] {
+        canvasImageView.subviews.filter { $0 !== drawingOverlayView }
+    }
+
+    func ensureDrawingOverlayOnTop() {
+        canvasImageView.bringSubviewToFront(drawingOverlayView)
+    }
+
     func showLineButtonHighlight(_ show: Bool) {
         guard let lineButton = lineButton else { return }
         if show {
@@ -624,47 +642,46 @@ public final class PhotoEditorViewController: UIViewController {
         
         // Draw the base image at full resolution
         currentImage.draw(in: CGRect(origin: .zero, size: originalSize))
-        
-        // Get the drawing layer from canvasImageView and scale it up
-        if let drawingImage = canvasImageView.image {
-            // The drawing layer is already at display resolution, scale it to original
-            let scaledDrawingRect = CGRect(origin: .zero, size: originalSize)
-            drawingImage.draw(in: scaledDrawingRect)
-        }
-        
+
         // Render text views and stickers at high resolution
         let imageRect = getImageBoundsInCanvas()
-        
-        for subview in canvasImageView.subviews {
+
+        for subview in contentSubviews {
             context.saveGState()
-            
+
             // Convert subview position from canvas coordinates to image coordinates
             let subviewCenter = subview.center
             let relativeX = (subviewCenter.x - imageRect.origin.x) / imageRect.width
             let relativeY = (subviewCenter.y - imageRect.origin.y) / imageRect.height
-            
+
             // Skip if subview is outside image bounds
             guard relativeX >= 0 && relativeX <= 1 && relativeY >= 0 && relativeY <= 1 else {
                 context.restoreGState()
                 continue
             }
-            
+
             // Calculate position and size at original resolution
             let originalCenterX = relativeX * originalSize.width
             let originalCenterY = relativeY * originalSize.height
             let scale = displayToOriginalScale
-            
+
             context.translateBy(x: originalCenterX, y: originalCenterY)
             context.scaleBy(x: scale, y: scale)
             context.concatenate(subview.transform)
             context.translateBy(x: -subview.bounds.width/2, y: -subview.bounds.height/2)
-            
+
             // Render the subview
             subview.layer.render(in: context)
-            
+
             context.restoreGState()
         }
-        
+
+        // Draw the freehand drawing overlay on top of subviews
+        if let drawingImage = drawingOverlayView.image {
+            let scaledDrawingRect = CGRect(origin: .zero, size: originalSize)
+            drawingImage.draw(in: scaledDrawingRect)
+        }
+
         guard let finalImage = UIGraphicsGetImageFromCurrentImageContext() else {
             return canvasView.toImage()
         }
@@ -697,13 +714,13 @@ public final class PhotoEditorViewController: UIViewController {
         view.layoutIfNeeded()
         
         // Rescale drawing layer if it exists
-        if let drawingImage = canvasImageView.image {
+        if let drawingImage = drawingOverlayView.image {
             let scaledDrawing = rescaleDrawingImage(drawingImage, scaleX: scaleX, scaleY: scaleY)
-            canvasImageView.image = scaledDrawing
+            drawingOverlayView.image = scaledDrawing
         }
-        
+
         // Rescale all subviews (text, stickers)
-        for subview in canvasImageView.subviews {
+        for subview in contentSubviews {
             // Scale position
             let currentCenter = subview.center
             subview.center = CGPoint(
@@ -820,7 +837,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     private func createSnapshot() -> EditorSnapshot {
         var subviewSnapshots: [SubviewSnapshot] = []
-        for subview in canvasImageView.subviews {
+        for subview in contentSubviews {
             let kind: SubviewSnapshot.Kind
             if let textView = subview as? UITextView,
                let font = textView.font,
@@ -845,7 +862,7 @@ public final class PhotoEditorViewController: UIViewController {
             ))
         }
         return EditorSnapshot(
-            drawingImage: canvasImageView.image,
+            drawingImage: drawingOverlayView.image,
             baseImage: self.image,
             subviewSnapshots: subviewSnapshots
         )
@@ -853,7 +870,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     private func restoreSnapshot(_ snapshot: EditorSnapshot, isRedo: Bool = false) {
         // Restore drawing layer
-        canvasImageView.image = snapshot.drawingImage
+        drawingOverlayView.image = snapshot.drawingImage
 
         // Restore base image
         if let baseImage = snapshot.baseImage {
@@ -861,8 +878,8 @@ public final class PhotoEditorViewController: UIViewController {
             setImageView(image: baseImage)
         }
 
-        // Remove all subviews
-        for subview in canvasImageView.subviews {
+        // Remove all content subviews (keep drawingOverlayView)
+        for subview in contentSubviews {
             subview.removeFromSuperview()
         }
 
@@ -904,6 +921,7 @@ public final class PhotoEditorViewController: UIViewController {
             canvasImageView.addSubview(view)
             addGestures(view: view)
         }
+        ensureDrawingOverlayOnTop()
 
         hasImageBeenModified = isRedo || editorUndoManager.canUndo
         updateUndoRedoButtons()
