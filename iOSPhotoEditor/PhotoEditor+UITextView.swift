@@ -20,6 +20,7 @@ extension PhotoEditorViewController: UITextViewDelegate {
         }
     }
     public func textViewDidBeginEditing(_ textView: UITextView) {
+        deselectCurrentSubview()
         isTyping = true
         saveSnapshot()
         setTopToolbarItemsHidden(true)

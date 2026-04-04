@@ -48,7 +48,8 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
     
     /**
      UIPinchGestureRecognizer - Pinching Objects
-     If it's a UITextView will make the font bigger so it doen't look pixlated
+     If it's a UITextView will make the font bigger so it doen't look pixlated.
+     Scale is clamped: stickers/lines 0.3–4.0, text 8pt–90pt.
      */
     @objc func pinchGesture(_ recognizer: UIPinchGestureRecognizer) {
         if let view = recognizer.view {
@@ -56,58 +57,81 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
                 saveSnapshot()
             }
             if let textView = view as? UITextView, let currentFont = textView.font {
-                if currentFont.pointSize * recognizer.scale < 90 {
-                    let font = UIFont(name: currentFont.fontName, size: currentFont.pointSize * recognizer.scale)
-                    textView.font = font
-                }
+                let proposedSize = currentFont.pointSize * recognizer.scale
+                let clampedSize = min(max(proposedSize, 8), 90)
+                let font = UIFont(name: currentFont.fontName, size: clampedSize)
+                textView.font = font
                 let sizeToFit = textView.sizeThatFits(CGSize(width: UIScreen.main.bounds.size.width,
                                                              height: CGFloat.greatestFiniteMagnitude))
                 textView.bounds.size = CGSize(width: textView.intrinsicContentSize.width,
                                               height: sizeToFit.height)
                 textView.setNeedsDisplay()
             } else {
-                view.transform = view.transform.scaledBy(x: recognizer.scale, y: recognizer.scale)
+                let currentS = currentScale(of: view)
+                let proposedS = currentS * recognizer.scale
+                let clampedS = min(max(proposedS, 0.3), 4.0)
+                let currentR = currentRotation(of: view)
+                view.transform = CGAffineTransform(scaleX: clampedS, y: clampedS)
+                    .rotated(by: currentR)
             }
             recognizer.scale = 1
+            if view == selectedSubview { refreshSelectionUI() }
         }
     }
     
     /**
      UIRotationGestureRecognizer - Rotating Objects
+     Uses virtual angle tracking with snap to cardinal directions.
      */
     @objc func rotationGesture(_ recognizer: UIRotationGestureRecognizer) {
         if let view = recognizer.view {
-            if recognizer.state == .began {
+            switch recognizer.state {
+            case .began:
                 saveSnapshot()
+                virtualRotationAngle = currentRotation(of: view)
+                isInRotationSnapZone = false
+            case .changed:
+                virtualRotationAngle += recognizer.rotation
+                recognizer.rotation = 0
+                let snappedAngle = snapAngle(virtualRotationAngle)
+                let scale = currentScale(of: view)
+
+                if view is UITextView {
+                    view.transform = CGAffineTransform(rotationAngle: snappedAngle)
+                } else {
+                    view.transform = CGAffineTransform(scaleX: scale, y: scale)
+                        .rotated(by: snappedAngle)
+                }
+                if view == selectedSubview { refreshSelectionUI() }
+            default:
+                break
             }
-            view.transform = view.transform.rotated(by: recognizer.rotation)
-            recognizer.rotation = 0
         }
     }
     
     /**
      UITapGestureRecognizer - Taping on Objects
-     Will make scale scale Effect
-     Selecting transparent parts of the imageview won't move the object
+     First tap selects (shows border + handle). Second tap on same view bounces.
+     Selecting transparent parts of the imageview won't move the object.
      */
     @objc func tapGesture(_ recognizer: UITapGestureRecognizer) {
         if let view = recognizer.view {
             if let imageView = view as? UIImageView {
                 if imageView.tag == lineSubviewTag {
-                    scaleEffect(view: imageView)
+                    selectSubview(imageView)
                 } else {
                     // Tap only on visible parts — topmost items checked first
                     for iv in subImageViews(view: canvasImageView).reversed() {
                         let location = recognizer.location(in: iv)
                         let alpha = iv.alphaAtPoint(location)
                         if alpha > 0 {
-                            scaleEffect(view: iv)
+                            selectSubview(iv)
                             break
                         }
                     }
                 }
             } else {
-                scaleEffect(view: view)
+                selectSubview(view)
             }
         }
     }
@@ -193,8 +217,10 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
 
         view.center = CGPoint(x: view.center.x + recognizer.translation(in: canvasImageView).x,
                               y: view.center.y + recognizer.translation(in: canvasImageView).y)
-        
+
         recognizer.setTranslation(CGPoint.zero, in: canvasImageView)
+
+        if view == selectedSubview { refreshSelectionUI() }
         
         if let previousPoint = lastPanPoint {
             //View is going into deleteView
@@ -232,6 +258,7 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
             }
 
             if deleteView.frame.contains(point) { // Delete the view
+                if view == selectedSubview { deselectCurrentSubview() }
                 view.removeFromSuperview()
                 if #available(iOS 10.0, *) {
                     let generator = UINotificationFeedbackGenerator()

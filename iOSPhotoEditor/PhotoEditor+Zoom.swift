@@ -250,6 +250,7 @@ extension PhotoEditorViewController {
         let scale = CGAffineTransform(scaleX: canvasZoomScale, y: canvasZoomScale)
         let translate = CGAffineTransform(translationX: canvasPanOffset.x, y: canvasPanOffset.y)
         canvasView.transform = scale.concatenating(translate)
+        refreshSelectionUI()
     }
 
     private func clampPanOffset() {
@@ -275,9 +276,12 @@ extension PhotoEditorViewController {
         if animated {
             UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseInOut) { [weak self] in
                 self?.canvasView.transform = .identity
+            } completion: { [weak self] _ in
+                self?.refreshSelectionUI()
             }
         } else {
             canvasView.transform = .identity
+            refreshSelectionUI()
         }
         updatePanGrabUI()
     }

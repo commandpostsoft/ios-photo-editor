@@ -133,6 +133,22 @@ public final class PhotoEditorViewController: UIViewController {
     var resetZoomButton: UIButton?
     var modeBeforeActiveOperation: Bool = true
 
+    // Selection
+    var selectedSubview: UIView?
+    var selectionOverlayContainer: UIView?
+    var selectionBorderLayer: CAShapeLayer?
+    var cornerHandleView: UIView?
+
+    // Handle drag state
+    var handleDragInitialAngle: CGFloat = 0
+    var handleDragInitialDistance: CGFloat = 0
+    var handleDragInitialScale: CGFloat = 0
+    var handleDragInitialRotation: CGFloat = 0
+
+    // Rotation snap state
+    var virtualRotationAngle: CGFloat = 0
+    var isInRotationSnapZone: Bool = false
+
     var editorUndoManager = EditorUndoManager()
     private var undoButton: UIButton?
     private var redoButton: UIButton?
@@ -168,6 +184,7 @@ public final class PhotoEditorViewController: UIViewController {
         lineButton = nil
         panGrabButton = nil
         resetZoomButton = nil
+        cleanupSelectionOverlay()
     }
 
     override public func viewDidLoad() {
@@ -204,6 +221,7 @@ public final class PhotoEditorViewController: UIViewController {
         setupUndoRedoButtons()
         setupCanvasZoomGestures()
         setupPanGrabToggle()
+        setupSelectionOverlay()
         updateActionButtons()
     }
     
@@ -852,6 +870,8 @@ public final class PhotoEditorViewController: UIViewController {
     }
 
     private func restoreSnapshot(_ snapshot: EditorSnapshot, isRedo: Bool = false) {
+        deselectCurrentSubview()
+
         // Restore drawing layer
         canvasImageView.image = snapshot.drawingImage
 

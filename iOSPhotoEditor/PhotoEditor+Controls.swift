@@ -49,6 +49,7 @@ extension PhotoEditorViewController {
     }
 
     @IBAction func cropButtonTapped(_ sender: UIButton) {
+        deselectCurrentSubview()
         exitDrawingMode()
         exitLineDrawingMode()
         let initialCropRect = visibleImageCropRect()
@@ -91,6 +92,7 @@ extension PhotoEditorViewController {
     }
 
     @objc func lineButtonTapped(_ sender: Any) {
+        deselectCurrentSubview()
         if isLineDrawing {
             exitLineDrawingMode()
         } else {
@@ -107,6 +109,7 @@ extension PhotoEditorViewController {
     }
 
     @IBAction func drawButtonTapped(_ sender: Any) {
+        deselectCurrentSubview()
         exitLineDrawingMode()
         if isDrawing {
             exitDrawingMode()
@@ -123,6 +126,7 @@ extension PhotoEditorViewController {
     }
 
     @IBAction func textButtonTapped(_ sender: Any) {
+        deselectCurrentSubview()
         exitDrawingMode()
         exitLineDrawingMode()
         modeBeforeActiveOperation = isPanZoomMode
@@ -154,6 +158,7 @@ extension PhotoEditorViewController {
     }    
     
     @IBAction func rotateButtonTapped(_ sender: Any) {
+        deselectCurrentSubview()
         exitDrawingMode()
         exitLineDrawingMode()
         resetCanvasZoom(animated: false)
@@ -255,6 +260,7 @@ extension PhotoEditorViewController {
     }
     
     @IBAction func clearButtonTapped(_ sender: AnyObject) {
+        deselectCurrentSubview()
         exitDrawingMode()
         exitLineDrawingMode()
         let alert = UIAlertController(

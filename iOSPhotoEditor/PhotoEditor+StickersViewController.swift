@@ -63,6 +63,7 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
         addGestures(view: view)
         hasImageBeenModified = true
         autoSwitchAfterContentPlacement()
+        selectSubview(view)
     }
     
     func didSelectImage(image: UIImage) {
@@ -79,6 +80,7 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
         addGestures(view: imageView)
         hasImageBeenModified = true
         autoSwitchAfterContentPlacement()
+        selectSubview(imageView)
     }
     
     func stickersViewDidDisappear() {

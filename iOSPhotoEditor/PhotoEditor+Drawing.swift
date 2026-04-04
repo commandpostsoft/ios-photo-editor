@@ -73,7 +73,8 @@ extension PhotoEditorViewController {
             }
         } else if isLineDrawing, let start = lineStartCanvasPoint, let layer = linePreviewLayer {
             if let touch = touches.first {
-                let current = clampPointToImageBounds(touch.location(in: canvasImageView))
+                let raw = clampPointToImageBounds(touch.location(in: canvasImageView))
+                let current = snapLineEndpoint(start: start, end: raw)
                 let path = UIBezierPath()
                 path.move(to: start)
                 path.addLine(to: current)
@@ -94,7 +95,8 @@ extension PhotoEditorViewController {
             linePreviewLayer = nil
 
             if let touch = touches.first {
-                let end = clampPointToImageBounds(touch.location(in: canvasImageView))
+                let raw = clampPointToImageBounds(touch.location(in: canvasImageView))
+                let end = snapLineEndpoint(start: start, end: raw)
                 // Only create if we have meaningful distance
                 let dx = end.x - start.x
                 let dy = end.y - start.y
@@ -231,12 +233,32 @@ extension PhotoEditorViewController {
     // Convert canvas coordinates to image coordinates (for drawing layer)
     func convertCanvasPointToImagePoint(_ canvasPoint: CGPoint) -> CGPoint {
         let imageRect = getImageBoundsInCanvas()
-        
+
         // Convert from canvas coordinates to image-relative coordinates
         let relativeX = canvasPoint.x - imageRect.origin.x
         let relativeY = canvasPoint.y - imageRect.origin.y
-        
+
         return CGPoint(x: relativeX, y: relativeY)
     }
-    
+
+    /// Snap a line endpoint to 8 cardinal directions (0/45/90/etc) if within ±7° threshold.
+    /// Projects the endpoint onto the snapped angle at the same distance from start.
+    func snapLineEndpoint(start: CGPoint, end: CGPoint) -> CGPoint {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let dist = sqrt(dx * dx + dy * dy)
+        guard dist > 1 else { return end }
+
+        let rawAngle = atan2(dy, dx)
+        let snapped = snapLineAngle(rawAngle)
+
+        if snapped == rawAngle {
+            return end
+        }
+
+        return CGPoint(
+            x: start.x + dist * cos(snapped),
+            y: start.y + dist * sin(snapped)
+        )
+    }
 }
