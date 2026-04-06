@@ -19,20 +19,26 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
     @objc func panGesture(_ recognizer: UIPanGestureRecognizer) {
         if let view = recognizer.view {
-            if view is UIImageView {
-                //Tap only on visible parts on the image
-                if recognizer.state == .began {
-                    for imageView in subImageViews(view: canvasImageView) {
-                        let location = recognizer.location(in: imageView)
-                        let alpha = imageView.alphaAtPoint(location)
-                        if alpha > 0 {
-                            imageViewToPan = imageView
-                            break
+            if let imageView = view as? UIImageView {
+                if imageView.tag == lineSubviewTag {
+                    // Line subviews are mostly transparent — use full bounds
+                    moveView(view: imageView, recognizer: recognizer)
+                } else {
+                    // Tap only on visible parts on the image
+                    // Check topmost (most recently placed) items first
+                    if recognizer.state == .began {
+                        for iv in subImageViews(view: canvasImageView).reversed() {
+                            let location = recognizer.location(in: iv)
+                            let alpha = iv.alphaAtPoint(location)
+                            if alpha > 0 {
+                                imageViewToPan = iv
+                                break
+                            }
                         }
                     }
-                }
-                if imageViewToPan != nil {
-                    moveView(view: imageViewToPan!, recognizer: recognizer)
+                    if let pan = imageViewToPan {
+                        moveView(view: pan, recognizer: recognizer)
+                    }
                 }
             } else {
                 moveView(view: view, recognizer: recognizer)
@@ -46,24 +52,18 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
     @objc func pinchGesture(_ recognizer: UIPinchGestureRecognizer) {
         if let view = recognizer.view {
-            if view is UITextView {
-                let textView = view as! UITextView
-                
-                if textView.font!.pointSize * recognizer.scale < 90 {
-                    let font = UIFont(name: textView.font!.fontName, size: textView.font!.pointSize * recognizer.scale)
+            if recognizer.state == .began {
+                saveSnapshot()
+            }
+            if let textView = view as? UITextView, let currentFont = textView.font {
+                if currentFont.pointSize * recognizer.scale < 90 {
+                    let font = UIFont(name: currentFont.fontName, size: currentFont.pointSize * recognizer.scale)
                     textView.font = font
-                    let sizeToFit = textView.sizeThatFits(CGSize(width: UIScreen.main.bounds.size.width,
-                                                                 height:CGFloat.greatestFiniteMagnitude))
-                    textView.bounds.size = CGSize(width: textView.intrinsicContentSize.width,
-                                                  height: sizeToFit.height)
-                } else {
-                    let sizeToFit = textView.sizeThatFits(CGSize(width: UIScreen.main.bounds.size.width,
-                                                                 height:CGFloat.greatestFiniteMagnitude))
-                    textView.bounds.size = CGSize(width: textView.intrinsicContentSize.width,
-                                                  height: sizeToFit.height)
                 }
-                
-                
+                let sizeToFit = textView.sizeThatFits(CGSize(width: UIScreen.main.bounds.size.width,
+                                                             height: CGFloat.greatestFiniteMagnitude))
+                textView.bounds.size = CGSize(width: textView.intrinsicContentSize.width,
+                                              height: sizeToFit.height)
                 textView.setNeedsDisplay()
             } else {
                 view.transform = view.transform.scaledBy(x: recognizer.scale, y: recognizer.scale)
@@ -77,6 +77,9 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
     @objc func rotationGesture(_ recognizer: UIRotationGestureRecognizer) {
         if let view = recognizer.view {
+            if recognizer.state == .began {
+                saveSnapshot()
+            }
             view.transform = view.transform.rotated(by: recognizer.rotation)
             recognizer.rotation = 0
         }
@@ -89,14 +92,18 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
     @objc func tapGesture(_ recognizer: UITapGestureRecognizer) {
         if let view = recognizer.view {
-            if view is UIImageView {
-                //Tap only on visible parts on the image
-                for imageView in subImageViews(view: canvasImageView) {
-                    let location = recognizer.location(in: imageView)
-                    let alpha = imageView.alphaAtPoint(location)
-                    if alpha > 0 {
-                        scaleEffect(view: imageView)
-                        break
+            if let imageView = view as? UIImageView {
+                if imageView.tag == lineSubviewTag {
+                    scaleEffect(view: imageView)
+                } else {
+                    // Tap only on visible parts — topmost items checked first
+                    for iv in subImageViews(view: canvasImageView).reversed() {
+                        let location = recognizer.location(in: iv)
+                        let alpha = iv.alphaAtPoint(location)
+                        if alpha > 0 {
+                            scaleEffect(view: iv)
+                            break
+                        }
                     }
                 }
             } else {
@@ -112,7 +119,18 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
         return true
     }
     
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer == canvasZoomSingleFingerPanGesture {
+            return isPanZoomMode && canvasZoomScale > 1.0 && !isDrawing && !isLineDrawing
+        }
+        return true
+    }
+
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if (gestureRecognizer == canvasZoomPanGesture || gestureRecognizer == canvasZoomSingleFingerPanGesture) &&
+           otherGestureRecognizer is UIScreenEdgePanGestureRecognizer {
+            return true
+        }
         return false
     }
     
@@ -138,7 +156,8 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
     func scaleEffect(view: UIView) {
         view.superview?.bringSubviewToFront(view)
-        
+        ensureDrawingOverlayOnTop()
+
         if #available(iOS 10.0, *) {
             let generator = UIImpactFeedbackGenerator(style: .heavy)
             generator.impactOccurred()
@@ -162,11 +181,16 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
      */
 
     func moveView(view: UIView, recognizer: UIPanGestureRecognizer)  {
-        
+
+        if recognizer.state == .began {
+            saveSnapshot()
+        }
+
         hideToolbar(hide: true)
         deleteView.isHidden = false
         
         view.superview?.bringSubviewToFront(view)
+        ensureDrawingOverlayOnTop()
         let pointToSuperView = recognizer.location(in: self.view)
 
         view.center = CGPoint(x: view.center.x + recognizer.translation(in: canvasImageView).x,
@@ -203,7 +227,12 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
             hideToolbar(hide: false)
             deleteView.isHidden = true
             let point = recognizer.location(in: self.view)
-            
+
+            // Update saved center so text returns to the moved position
+            if view is UITextView && view == activeTextView {
+                lastTextViewTransCenter = view.center
+            }
+
             if deleteView.frame.contains(point) { // Delete the view
                 view.removeFromSuperview()
                 if #available(iOS 10.0, *) {
@@ -218,12 +247,12 @@ extension PhotoEditorViewController : UIGestureRecognizerDelegate  {
             }
         }
     }
-    
+
     func subImageViews(view: UIView) -> [UIImageView] {
         var imageviews: [UIImageView] = []
-        for imageView in view.subviews {
-            if imageView is UIImageView {
-                imageviews.append(imageView as! UIImageView)
+        for subview in view.subviews {
+            if let iv = subview as? UIImageView, iv !== drawingOverlayView {
+                imageviews.append(iv)
             }
         }
         return imageviews

@@ -21,11 +21,18 @@ extension PhotoEditorViewController: UITextViewDelegate {
     }
     public func textViewDidBeginEditing(_ textView: UITextView) {
         isTyping = true
-        lastTextViewTransform =  textView.transform
+        // Save snapshot for re-editing existing text views (new text views
+        // are already snapshotted in textButtonTapped before addSubview).
+        if !textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            saveSnapshot()
+        }
+        setTopToolbarItemsHidden(true)
+        lastTextViewTransform = textView.transform
         lastTextViewTransCenter = textView.center
-        lastTextViewFont = textView.font!
+        lastTextViewFont = textView.font
         activeTextView = textView
         textView.superview?.bringSubviewToFront(textView)
+        ensureDrawingOverlayOnTop()
         textView.font = UIFont(name: "Helvetica", size: 30)
         UIView.animate(withDuration: 0.3,
                        animations: {
@@ -33,27 +40,37 @@ extension PhotoEditorViewController: UITextViewDelegate {
                         textView.center = CGPoint(x: UIScreen.main.bounds.width / 2,
                                                   y:  UIScreen.main.bounds.height / 5)
         }, completion: nil)
-        
+
     }
-    
+
     public func textViewDidEndEditing(_ textView: UITextView) {
-        guard lastTextViewTransform != nil && lastTextViewTransCenter != nil && lastTextViewFont != nil
-            else {
-                return
+        guard let savedTransform = lastTextViewTransform,
+              let savedCenter = lastTextViewTransCenter,
+              let savedFont = lastTextViewFont
+        else {
+            return
         }
         activeTextView = nil
-        textView.font = self.lastTextViewFont!
-        
-        // Mark image as modified if text was added
-        if !textView.text.isEmpty {
+        textView.font = savedFont
+
+        if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Remove empty text views to avoid invisible clutter
+            textView.removeFromSuperview()
+            isTyping = false
+            setTopToolbarItemsHidden(false)
+            restorePreviousMode()
+        } else {
             hasImageBeenModified = true
+            UIView.animate(withDuration: 0.3,
+                           animations: {
+                            textView.transform = savedTransform
+                            textView.center = savedCenter
+            }, completion: nil)
+            isTyping = false
+            setTopToolbarItemsHidden(false)
+            // Switch to grab mode so user can immediately reposition the text
+            autoSwitchAfterContentPlacement()
         }
-        
-        UIView.animate(withDuration: 0.3,
-                       animations: {
-                        textView.transform = self.lastTextViewTransform!
-                        textView.center = self.lastTextViewTransCenter!
-        }, completion: nil)
     }
     
 }

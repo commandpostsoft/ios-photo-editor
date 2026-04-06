@@ -12,13 +12,14 @@
         </array>
     </customFonts>
     <objects>
-        <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="PhotoEditorViewController" customModuleProvider="target">
+        <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="PhotoEditorViewController" customModule="iOSPhotoEditor">
             <connections>
                 <outlet property="bottomGradient" destination="ZGa-1B-gkO" id="pYn-g8-ak7"/>
                 <outlet property="bottomToolbar" destination="87h-1G-t5q" id="Pzi-Dw-qOq"/>
                 <outlet property="canvasImageView" destination="n3p-yR-4xc" id="OED-1L-YMz"/>
                 <outlet property="canvasView" destination="S1Y-ZS-dct" id="p6I-kg-UUU"/>
                 <outlet property="clearButton" destination="Kpe-Ez-Cio" id="C0i-3L-kLI"/>
+                <outlet property="continueButton" destination="wNH-TU-KxG" id="continueButton-outlet"/>
                 <outlet property="colorPickerTopConstraint" destination="mok-x4-xHA" id="color-picker-constraint"/>
                 <outlet property="colorPickerView" destination="Cy8-ap-fH9" id="KJx-KY-rfM"/>
                 <outlet property="colorPickerViewBottomConstraint" destination="mok-x4-xHA" id="SKq-N5-bcn"/>
@@ -74,7 +75,7 @@
                         <constraint firstItem="5rw-9v-ExQ" firstAttribute="leading" secondItem="S1Y-ZS-dct" secondAttribute="leading" id="v73-ro-BkR"/>
                     </constraints>
                 </view>
-                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="rLz-36-0xz" customClass="GradientView" customModuleProvider="target">
+                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="rLz-36-0xz" customClass="GradientView" customModule="iOSPhotoEditor">
                     <rect key="frame" x="0.0" y="44" width="375" height="60"/>
                     <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                     <constraints>
@@ -172,7 +173,7 @@
                         <constraint firstItem="9an-1W-thw" firstAttribute="leading" secondItem="3MS-N5-3xY" secondAttribute="leading" constant="12" id="lPL-cU-BVr"/>
                     </constraints>
                 </view>
-                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="ZGa-1B-gkO" customClass="GradientView" customModuleProvider="target">
+                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="ZGa-1B-gkO" customClass="GradientView" customModule="iOSPhotoEditor">
                     <rect key="frame" x="0.0" y="587" width="375" height="80"/>
                     <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                     <constraints>
@@ -302,7 +303,6 @@
                     <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                     <constraints>
                         <constraint firstItem="GaQ-XR-asZ" firstAttribute="leading" secondItem="Cy8-ap-fH9" secondAttribute="leading" id="5uh-Qw-RZB"/>
-                        <constraint firstAttribute="width" constant="280" id="CyW-kJ-8nH"/>
                         <constraint firstAttribute="height" constant="50" id="KBh-Ry-wrN"/>
                         <constraint firstItem="GaQ-XR-asZ" firstAttribute="top" secondItem="Cy8-ap-fH9" secondAttribute="top" id="LEF-vO-2nq"/>
                         <constraint firstAttribute="trailing" secondItem="GaQ-XR-asZ" secondAttribute="trailing" id="ZAL-PE-sPi"/>
@@ -323,6 +323,7 @@
                 <constraint firstItem="ZGa-1B-gkO" firstAttribute="leading" secondItem="HPk-Bg-V0q" secondAttribute="leading" id="YYk-Vg-obo"/>
                 <constraint firstAttribute="trailing" secondItem="KxU-y4-Jwh" secondAttribute="trailing" constant="12" id="Z0h-d5-J2Z"/>
                 <constraint firstItem="Cy8-ap-fH9" firstAttribute="leading" secondItem="HPk-Bg-V0q" secondAttribute="leading" constant="12" id="dlF-iN-Gjg"/>
+                <constraint firstAttribute="trailing" secondItem="Cy8-ap-fH9" secondAttribute="trailing" constant="12" id="colorPicker-trailing"/>
                 <constraint firstAttribute="trailing" secondItem="S1Y-ZS-dct" secondAttribute="trailing" id="jwU-EC-jaR"/>
                 <constraint firstAttribute="trailing" secondItem="87h-1G-t5q" secondAttribute="trailing" id="kaD-bR-ZZt"/>
                 <constraint firstItem="S1Y-ZS-dct" firstAttribute="centerY" secondItem="HPk-Bg-V0q" secondAttribute="centerY" id="lCZ-Hj-EUs"/>

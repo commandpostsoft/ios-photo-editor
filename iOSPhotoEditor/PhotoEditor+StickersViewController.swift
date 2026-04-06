@@ -14,9 +14,12 @@ extension PhotoEditorViewController {
     func addStickersViewController() {
         stickersVCIsVisible = true
         hideToolbar(hide: true)
+        modeBeforeActiveOperation = isPanZoomMode
+        disableZoomGestures()
         self.canvasImageView.isUserInteractionEnabled = false
         stickersViewController.stickersViewControllerDelegate = self
-        
+        stickersViewController.hideEmojis = hiddenControls.contains(.emoji)
+
         for image in self.stickers {
             stickersViewController.stickers.append(image)
         }
@@ -30,19 +33,20 @@ extension PhotoEditorViewController {
     
     func removeStickersView() {
         stickersVCIsVisible = false
-        self.canvasImageView.isUserInteractionEnabled = true
+        restorePreviousMode()
         UIView.animate(withDuration: 0.3,
                        delay: 0,
                        options: UIView.AnimationOptions.curveEaseIn,
-                       animations: { () -> Void in
+                       animations: { [weak self] () -> Void in
+                        guard let self = self else { return }
                         var frame = self.stickersViewController.view.frame
                         frame.origin.y = UIScreen.main.bounds.maxY
                         self.stickersViewController.view.frame = frame
-                        
-        }, completion: { (finished) -> Void in
-            self.stickersViewController.view.removeFromSuperview()
-            self.stickersViewController.removeFromParent()
-            self.hideToolbar(hide: false)
+
+        }, completion: { [weak self] (finished) -> Void in
+            self?.stickersViewController.view.removeFromSuperview()
+            self?.stickersViewController.removeFromParent()
+            self?.hideToolbar(hide: false)
         })
     }    
 }
@@ -51,31 +55,40 @@ extension PhotoEditorViewController: StickersViewControllerDelegate {
     
     func didSelectView(view: UIView) {
         self.removeStickersView()
-        
+        saveSnapshot()
+
         view.center = canvasImageView.center
         self.canvasImageView.addSubview(view)
+        ensureDrawingOverlayOnTop()
         //Gestures
         addGestures(view: view)
         hasImageBeenModified = true
+        autoSwitchAfterContentPlacement()
     }
-    
+
     func didSelectImage(image: UIImage) {
         self.removeStickersView()
-        
+        saveSnapshot()
+
         let imageView = UIImageView(image: image)
         imageView.contentMode = .scaleAspectFit
         imageView.frame.size = CGSize(width: 150, height: 150)
         imageView.center = canvasImageView.center
-        
+
         self.canvasImageView.addSubview(imageView)
+        ensureDrawingOverlayOnTop()
         //Gestures
         addGestures(view: imageView)
         hasImageBeenModified = true
+        autoSwitchAfterContentPlacement()
     }
     
     func stickersViewDidDisappear() {
+        // Only restore if removeStickersView hasn't already handled it
+        guard stickersVCIsVisible else { return }
         stickersVCIsVisible = false
         hideToolbar(hide: false)
+        restorePreviousMode()
     }
     
     func addGestures(view: UIView) {
