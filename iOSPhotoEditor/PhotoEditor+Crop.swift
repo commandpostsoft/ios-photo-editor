@@ -20,6 +20,8 @@ extension PhotoEditorViewController: CropViewControllerDelegate {
         guard let baseImage = self.image else { return }
         let croppedBaseImage = baseImage.rotatedImageWithTransform(transform, croppedToRect: cropRect)
 
+        // NOTE: cropDrawingLayer MUST run before setImageView because it reads the
+        // old displayImageSize via getImageBoundsInCanvas(). Same pattern as rotateDrawingLayer.
         cropDrawingLayer(transform: transform, cropRect: cropRect, newImage: croppedBaseImage)
 
         self.setImageView(image: croppedBaseImage)
@@ -69,7 +71,7 @@ extension PhotoEditorViewController: CropViewControllerDelegate {
         let cropNormH = cropRect.height / currentImage.size.height
 
         // Scale factor to preserve proportional sticker/line coverage
-        guard cropNormW > 0 else { return }
+        guard cropNormW > 0 && cropNormH > 0 else { return }
         let scaleFactor = newImageRect.width / (oldImageRect.width * cropNormW)
 
         for subview in contentSubviews.reversed() {
@@ -77,10 +79,12 @@ extension PhotoEditorViewController: CropViewControllerDelegate {
             let relX = (subview.center.x - oldImageRect.origin.x) / oldImageRect.width
             let relY = (subview.center.y - oldImageRect.origin.y) / oldImageRect.height
 
-            // Apply crop-view rotation in normalized space (around image center 0.5, 0.5)
-            let centeredPt = CGPoint(x: relX - 0.5, y: relY - 0.5).applying(transform)
-            let rotRelX = centeredPt.x + 0.5
-            let rotRelY = centeredPt.y + 0.5
+            // Apply crop-view rotation in pixel space (aspect-correct) then back to normalized
+            let pixelX = relX * currentImage.size.width - currentImage.size.width / 2
+            let pixelY = relY * currentImage.size.height - currentImage.size.height / 2
+            let rotated = CGPoint(x: pixelX, y: pixelY).applying(transform)
+            let rotRelX = (rotated.x + currentImage.size.width / 2) / currentImage.size.width
+            let rotRelY = (rotated.y + currentImage.size.height / 2) / currentImage.size.height
 
             // Check if within crop area (small margin for edge elements)
             guard rotRelX >= cropNormX - 0.05 && rotRelX <= cropNormX + cropNormW + 0.05 &&

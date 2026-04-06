@@ -20,8 +20,8 @@ public struct ImageProcessor {
 
     /// Crops the image to the given rectangle (in image point coordinates).
     ///
-    /// The rectangle is intersected with the image bounds by `CGImage.cropping(to:)`.
-    /// If the intersection is empty the original image is returned.
+    /// The rectangle is passed directly to `CGImage.cropping(to:)`.
+    /// If the crop fails (e.g. the rectangle falls outside the image) the original image is returned.
     ///
     /// - Parameters:
     ///   - image: The source image.

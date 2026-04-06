@@ -148,6 +148,7 @@ extension PhotoEditorViewController {
         textView.autocorrectionType = .no
         textView.isScrollEnabled = false
         textView.delegate = self
+        saveSnapshot()
         self.canvasImageView.addSubview(textView)
         ensureDrawingOverlayOnTop()
         addGestures(view: textView)
@@ -313,7 +314,7 @@ extension PhotoEditorViewController {
         exitDrawingMode()
         exitLineDrawingMode()
         resetCanvasZoom(animated: false)
-        if hasImageBeenModified {
+        if hasImageBeenModified || editorUndoManager.canUndo {
             // Image was modified, process and return high-resolution edited image
             let img = createHighResolutionImage()
             Task { @MainActor [weak self] in

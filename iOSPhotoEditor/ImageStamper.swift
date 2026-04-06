@@ -315,7 +315,7 @@ public struct ImageStamper {
         let textSize = CGSize(width: ceil(textRect.width), height: ceil(textRect.height))
 
         let origin = position.origin(for: textSize, in: imageSize)
-        let drawRect = CGRect(origin: origin, size: CGSize(width: maxWidth, height: textSize.height))
+        let drawRect = CGRect(origin: origin, size: textSize)
 
         // Apply shadow if configured
         if let shadow = style.shadow {

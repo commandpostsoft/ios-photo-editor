@@ -136,7 +136,7 @@ public enum control {
 | `colors` | `[UIColor]` | Colors available for drawing and text |
 | `hiddenControls` | `[control]` | Controls to hide from the toolbar |
 | `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`) |
-| `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 4 entries. Hidden via `.markerSize` in `hiddenControls`. |
+| `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 5 entries. Hidden via `.markerSize` in `hiddenControls`. |
 | `maxUndoLevels` | `Int` | Number of undo steps to keep (default: `5`). Higher values use more memory. Hidden via `.undoRedo` in `hiddenControls`. |
 
 ### Pan & Zoom

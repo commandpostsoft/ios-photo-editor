@@ -119,9 +119,8 @@ open class CropView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, 
     fileprivate var marginTop: CGFloat {
         // Account for safe area + navigation bar so crop handles aren't hidden
         let safeTop = safeAreaInsets.top
-        let safeBottom = safeAreaInsets.bottom
         // Use at least 37pt, but prefer safe area + extra padding for nav bar
-        return max(37.0, safeTop + safeBottom + 10)
+        return max(37.0, safeTop + 10)
     }
     fileprivate let MarginLeft: CGFloat = 20.0
 

@@ -77,7 +77,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     /**
      Array of marker sizes for the marker size picker.
-     Up to 4 values, minimum value 1. The second size is auto-selected by default.
+     Up to 5 values, minimum value 1. The second size is auto-selected by default.
      Default: [5, 8, 12, 18]
      */
     public var markerSizes: [CGFloat] = [5, 8, 12, 18]
@@ -202,11 +202,11 @@ public final class PhotoEditorViewController: UIViewController {
         setupMarkerSizePicker()
         stickersViewController = StickersViewController(nibName: "StickersViewController", bundle: Bundle.module)
         setupLineButton()
-        hideControls()
         setupDrawButtonLongPress()
         setupUndoRedoButtons()
         setupCanvasZoomGestures()
         setupPanGrabToggle()
+        hideControls()
         updateActionButtons()
 
         drawingOverlayView = UIImageView()

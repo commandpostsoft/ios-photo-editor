@@ -38,7 +38,8 @@ extension PhotoEditorViewController {
     }
 
     func setupPanGrabToggle() {
-        guard let stackView = clearButton?.superview as? UIStackView else { return }
+        guard !hiddenControls.contains(.panZoom),
+              let stackView = clearButton?.superview as? UIStackView else { return }
 
         let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
 

@@ -21,7 +21,11 @@ extension PhotoEditorViewController: UITextViewDelegate {
     }
     public func textViewDidBeginEditing(_ textView: UITextView) {
         isTyping = true
-        saveSnapshot()
+        // Save snapshot for re-editing existing text views (new text views
+        // are already snapshotted in textButtonTapped before addSubview).
+        if !textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            saveSnapshot()
+        }
         setTopToolbarItemsHidden(true)
         lastTextViewTransform = textView.transform
         lastTextViewTransCenter = textView.center
