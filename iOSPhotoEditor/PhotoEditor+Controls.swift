@@ -55,7 +55,7 @@ extension PhotoEditorViewController {
         resetCanvasZoom(animated: false)
         let controller = CropViewController()
         controller.delegate = self
-        controller.image = image
+        controller.image = createHighResolutionImage()
         if initialCropRect != .zero {
             controller.imageCropRect = initialCropRect
         }
