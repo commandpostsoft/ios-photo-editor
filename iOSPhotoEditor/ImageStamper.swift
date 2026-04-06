@@ -143,19 +143,23 @@ public struct StampTextStyle {
     /// Maximum width of the text as a fraction (0...1) of the image width.
     /// Text will wrap if it exceeds this width. `nil` means no wrapping.
     public var maxWidthFraction: CGFloat?
+    /// Text alignment within the draw rect. Defaults to `.left`.
+    public var alignment: NSTextAlignment
 
     public init(fontSize: StampDimension = .points(64),
                 fontName: String? = nil,
                 color: UIColor = .white,
                 shadow: StampShadow? = .default,
                 stroke: StampStroke? = nil,
-                maxWidthFraction: CGFloat? = nil) {
+                maxWidthFraction: CGFloat? = nil,
+                alignment: NSTextAlignment = .left) {
         self.fontSize = fontSize
         self.fontName = fontName
         self.color = color
         self.shadow = shadow
         self.stroke = stroke
         self.maxWidthFraction = maxWidthFraction
+        self.alignment = alignment
     }
 
     /// Backward-compatible convenience initializer accepting a UIFont directly.
@@ -163,13 +167,15 @@ public struct StampTextStyle {
                 color: UIColor = .white,
                 shadow: StampShadow? = .default,
                 stroke: StampStroke? = nil,
-                maxWidthFraction: CGFloat? = nil) {
+                maxWidthFraction: CGFloat? = nil,
+                alignment: NSTextAlignment = .left) {
         self.fontSize = .points(font.pointSize)
         self.fontName = font.fontName
         self.color = color
         self.shadow = shadow
         self.stroke = stroke
         self.maxWidthFraction = maxWidthFraction
+        self.alignment = alignment
     }
 
     /// Resolves the font at the appropriate size for the given image dimensions.
@@ -289,6 +295,7 @@ public struct ImageStamper {
         // Build fill attributes
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineBreakMode = .byWordWrapping
+        paragraphStyle.alignment = style.alignment
 
         var fillAttributes: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -312,10 +319,14 @@ public struct ImageStamper {
             attributes: fillAttributes,
             context: nil
         )
-        let textSize = CGSize(width: ceil(textRect.width), height: ceil(textRect.height))
+        let textHeight = ceil(textRect.height)
+        // For non-left alignment, use the full maxWidth so the paragraph style
+        // alignment has room to position the text within the rect.
+        let drawWidth: CGFloat = (style.alignment == .left) ? ceil(textRect.width) : maxWidth
+        let positionSize = CGSize(width: drawWidth, height: textHeight)
 
-        let origin = position.origin(for: textSize, in: imageSize)
-        let drawRect = CGRect(origin: origin, size: textSize)
+        let origin = position.origin(for: positionSize, in: imageSize)
+        let drawRect = CGRect(origin: origin, size: positionSize)
 
         // Apply shadow if configured
         if let shadow = style.shadow {
