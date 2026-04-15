@@ -31,10 +31,16 @@ public final class PhotoEditorViewController: UIViewController {
     @IBOutlet weak var colorsCollectionView: UICollectionView!
     @IBOutlet weak var colorPickerView: UIView!
     @IBOutlet weak var colorPickerViewBottomConstraint: NSLayoutConstraint!
-    @IBOutlet weak var topToolbarTopConstraint: NSLayoutConstraint!
-    @IBOutlet weak var topGradientTopConstraint: NSLayoutConstraint!
-    @IBOutlet weak var colorPickerTopConstraint: NSLayoutConstraint!
-    @IBOutlet weak var doneButtonTopConstraint: NSLayoutConstraint!
+    // These are reassigned at runtime in anchorTopConstraintsToSafeArea();
+    // NSLayoutConstraint outlets must not be weak when reassigned — the RHS
+    // temporary deallocates before activation otherwise.
+    @IBOutlet var topToolbarTopConstraint: NSLayoutConstraint!
+    @IBOutlet var topGradientTopConstraint: NSLayoutConstraint!
+    @IBOutlet var colorPickerTopConstraint: NSLayoutConstraint!
+    @IBOutlet var doneButtonTopConstraint: NSLayoutConstraint!
+    // Intentionally weak — only deactivated, never reassigned. If a future
+    // change reassigns it, switch to strong (see the four top constraints above).
+    @IBOutlet weak var cancelButtonLeadingConstraint: NSLayoutConstraint!
     
     //Controls
     @IBOutlet weak var cropButton: UIButton!
@@ -208,12 +214,11 @@ public final class PhotoEditorViewController: UIViewController {
         setupPanGrabToggle()
         hideControls()
         updateActionButtons()
+        anchorTopConstraintsToSafeArea()
 
         drawingOverlayView = UIImageView()
         drawingOverlayView.contentMode = .scaleToFill
         drawingOverlayView.isUserInteractionEnabled = false
-        drawingOverlayView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        drawingOverlayView.frame = canvasImageView.bounds
         canvasImageView.addSubview(drawingOverlayView)
     }
     
@@ -225,10 +230,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        
-        // Adjust top spacing based on safe area
-        adjustTopSpacingForSafeArea()
-        
+
         // Use full screen bounds for simpler sizing
         let currentScreenBounds = view.bounds.size
         
@@ -246,14 +248,28 @@ public final class PhotoEditorViewController: UIViewController {
         }
     }
     
-    private func adjustTopSpacingForSafeArea() {
-        let safeAreaTop = view.safeAreaInsets.top
-        
-        // Adjust constraints based on safe area - use minimal spacing when no safe area needed
-        topToolbarTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop : 0
-        topGradientTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop : 0
-        colorPickerTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop + 66 : 66
-        doneButtonTopConstraint.constant = safeAreaTop > 0 ? safeAreaTop + 11 : 11
+    /// Call once from viewDidLoad. Deactivates the xib's top constraints
+    /// (pinned to `view.top` with baked-in 44/44/50/55 constants) and
+    /// re-anchors them to `safeAreaLayoutGuide.topAnchor` so UIKit tracks
+    /// safe-area changes automatically — no race with the first layout pass.
+    private func anchorTopConstraintsToSafeArea() {
+        topToolbarTopConstraint?.isActive = false
+        topGradientTopConstraint?.isActive = false
+        colorPickerTopConstraint?.isActive = false
+        doneButtonTopConstraint?.isActive = false
+
+        let guide = view.safeAreaLayoutGuide
+        topToolbarTopConstraint  = topToolbar.topAnchor.constraint(equalTo: guide.topAnchor)
+        topGradientTopConstraint = topGradient.topAnchor.constraint(equalTo: guide.topAnchor)
+        colorPickerTopConstraint = colorPickerView.topAnchor.constraint(equalTo: guide.topAnchor, constant: 66)
+        doneButtonTopConstraint  = doneButton.topAnchor.constraint(equalTo: guide.topAnchor, constant: 11)
+
+        NSLayoutConstraint.activate([
+            topToolbarTopConstraint,
+            topGradientTopConstraint,
+            colorPickerTopConstraint,
+            doneButtonTopConstraint
+        ])
     }
     
     private func setupIconFonts() {
@@ -447,9 +463,18 @@ public final class PhotoEditorViewController: UIViewController {
         
         // Set the image view constraints
         imageViewHeightConstraint.constant = displayImageSize.height
-        
+
         // Force layout update
         view.layoutIfNeeded()
+
+        // Pin drawing overlay to the actual image rect so its bitmap is not
+        // stretched across the horizontal letterbox margins (iPad portrait).
+        updateDrawingOverlayFrame()
+    }
+
+    func updateDrawingOverlayFrame() {
+        guard isViewLoaded, drawingOverlayView != nil else { return }
+        drawingOverlayView.frame = getImageBoundsInCanvas()
     }
     
     func setTopToolbarItemsHidden(_ hidden: Bool) {
@@ -718,6 +743,7 @@ public final class PhotoEditorViewController: UIViewController {
             let scaledDrawing = rescaleDrawingImage(drawingImage, scaleX: scaleX, scaleY: scaleY)
             drawingOverlayView.image = scaledDrawing
         }
+        updateDrawingOverlayFrame()
 
         // Rescale all subviews (text, stickers)
         for subview in contentSubviews {
@@ -793,7 +819,22 @@ public final class PhotoEditorViewController: UIViewController {
         })
 
         if let cancelButton = cancelButton {
+            // On iPadOS 26+ use the corner-adapted safe-area guide so the
+            // cancel button shifts past the Stage Manager traffic-light pill
+            // when windowed (same mechanism UINavigationBar uses). Use
+            // .safeArea (not .margins) so the baseline leading inset on iPad
+            // fullscreen stays at 0 — avoids double-counting against the
+            // `constant: 12` below. Fall back to safeAreaLayoutGuide on iOS ≤ 25.
+            cancelButtonLeadingConstraint?.isActive = false
+            let leadingAnchor: NSLayoutXAxisAnchor
+            if #available(iOS 26.0, *) {
+                let guide = view.layoutGuide(for: .safeArea(cornerAdaptation: .horizontal))
+                leadingAnchor = guide.leadingAnchor
+            } else {
+                leadingAnchor = view.safeAreaLayoutGuide.leadingAnchor
+            }
             NSLayoutConstraint.activate([
+                cancelButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
                 stack.centerYAnchor.constraint(equalTo: topToolbar.centerYAnchor),
                 stack.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 12)
             ])
