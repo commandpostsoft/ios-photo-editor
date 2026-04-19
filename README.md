@@ -67,13 +67,22 @@ photoEditor.stickers = [
 // Optional: Hide specific controls (e.g. hide emojis when using custom stickers only)
 photoEditor.hiddenControls = [.save, .share, .emoji]
 
-// Optional: Customize drawing and text colors
+// Optional: Customize drawing and text colors.
+// - Empty array (default): 14-color built-in palette is shown.
+// - Exactly one color: the swatch row is hidden and that color is locked in
+//   for both drawing and text.
+// - Two or more colors: the swatch row shows the provided palette.
 photoEditor.colors = [.red, .blue, .green, .yellow, .white, .black]
 
-// Optional: Set drawing line thickness (default is 5.0)
+// Optional: Set drawing line thickness (default is 5.0).
+// Ignored when `markerSizes` has 2+ entries — the picker wins.
 photoEditor.drawLineWidth = 8.0
 
-// Optional: Customize marker sizes (picker shown by default)
+// Optional: Customize marker sizes (picker shown by default).
+// - Empty array: picker hidden; `drawLineWidth` is used.
+// - Exactly one size: picker hidden; that size is locked in as `drawLineWidth`.
+// - Two or more sizes (up to 5): picker shown.
+// The same width applies to both the freehand draw tool and the line tool.
 photoEditor.markerSizes = [5, 8, 12, 18]
 
 // Optional: Disable undo/redo or marker size picker
@@ -133,11 +142,22 @@ public enum control {
 |----------|------|-------------|
 | `image` | `UIImage?` | The image to be edited |
 | `stickers` | `[UIImage]` | Custom stickers for the user to choose from |
-| `colors` | `[UIColor]` | Colors available for drawing and text |
+| `colors` | `[UIColor]` | Colors available for drawing and text. Empty uses a 14-color default palette. A single entry hides the swatch row and locks that color in for both drawing and text. |
 | `hiddenControls` | `[control]` | Controls to hide from the toolbar |
-| `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`) |
-| `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 5 entries. Hidden via `.markerSize` in `hiddenControls`. |
+| `drawLineWidth` | `CGFloat` | Drawing line thickness (default: `5.0`). Overridden when `markerSizes` has 2+ entries. |
+| `markerSizes` | `[CGFloat]` | Marker sizes for the picker (default: `[5, 8, 12, 18]`). Min value: 1, max 5 entries. With 0 or 1 entries the picker is hidden automatically; a single entry is applied as the active `drawLineWidth`. Can also be hidden explicitly via `.markerSize` in `hiddenControls`. Applies to both the freehand draw tool and the line tool. |
 | `maxUndoLevels` | `Int` | Number of undo steps to keep (default: `5`). Higher values use more memory. Hidden via `.undoRedo` in `hiddenControls`. |
+
+### Toolbar Layout
+
+The top toolbar is arranged right-to-left for quick thumb access: **draw** is always rightmost, with **line** immediately to its left, then **sticker**. The **text**, **crop**, and **rotate** buttons fill the remaining space to the left. Hidden controls (via `hiddenControls`) are removed without affecting the order of the rest.
+
+### Color and Marker Size Pickers
+
+When you enter draw, line, or text mode, a picker bar appears above the bottom toolbar showing the color swatches on the left and the marker size options on the right.
+
+- **Auto-hide behavior** — the bar itself is hidden whenever it would be empty. Configurations that remove both pickers (e.g. a single `colors` entry plus 0–1 `markerSizes`, or `.markerSize` in `hiddenControls` combined with a single color) result in no bar at all.
+- **Long-press to hide while drawing** — long-pressing the draw or line button toggles the picker bar while you're actively drawing, so you can see more of the canvas. Tapping the tool button again to exit the mode also clears the bar. This toggle is a no-op when the bar has no content.
 
 ### Pan & Zoom
 

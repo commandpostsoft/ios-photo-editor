@@ -100,8 +100,8 @@ extension PhotoEditorViewController {
             isLineDrawing = true
             canvasImageView.isUserInteractionEnabled = false
             let showPicker = !pickerHiddenWhileDrawing
-            colorPickerView.isHidden = !showPicker
             markerSizeCollectionView?.isHidden = !showPicker
+            setColorPickerBarVisible(showPicker)
             showLineButtonHighlight(true)
         }
     }
@@ -116,8 +116,8 @@ extension PhotoEditorViewController {
             isDrawing = true
             canvasImageView.isUserInteractionEnabled = false
             let showPicker = !pickerHiddenWhileDrawing
-            colorPickerView.isHidden = !showPicker
             markerSizeCollectionView?.isHidden = !showPicker
+            setColorPickerBarVisible(showPicker)
             showDrawButtonHighlight(true)
         }
     }

@@ -14,17 +14,17 @@ extension PhotoEditorViewController {
     @objc func keyboardDidShow(notification: NSNotification) {
         if isTyping {
             doneButton.isHidden = false
-            colorPickerView.isHidden = false
+            setColorPickerBarVisible(true)
             hideToolbar(hide: true)
         }
     }
-    
+
     @objc func keyboardWillHide(notification: NSNotification) {
         // Keep Done button and color picker visible so the user can
         // finish editing text (tap Done) after dismissing the keyboard.
         if isTyping {
             doneButton.isHidden = false
-            colorPickerView.isHidden = false
+            setColorPickerBarVisible(true)
         }
     }
     

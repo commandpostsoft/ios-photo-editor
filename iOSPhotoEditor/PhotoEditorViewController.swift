@@ -129,6 +129,10 @@ public final class PhotoEditorViewController: UIViewController {
     var markerSizeCollectionViewDelegate: MarkerSizeCollectionViewDelegate?
     var stickersViewController: StickersViewController!
 
+    // False when `colors` has exactly 1 entry -- the swatch row offers no choice
+    // so it's hidden and the single color is applied to drawColor/textColor.
+    var colorsPickerAvailable: Bool = true
+
     var canvasZoomScale: CGFloat = 1.0
     var canvasPanOffset: CGPoint = .zero
     var canvasZoomPinchGesture: UIPinchGestureRecognizer?
@@ -280,8 +284,10 @@ public final class PhotoEditorViewController: UIViewController {
         cropButton?.setTitle("\u{E90A}", for: .normal)
         cropButton?.titleLabel?.font = icomoonFont
         
-        stickerButton?.setTitle("\u{E906}", for: .normal)
-        stickerButton?.titleLabel?.font = icomoonFont
+        let stickerSymbolConfig = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        stickerButton?.setTitle(nil, for: .normal)
+        stickerButton?.setImage(UIImage(systemName: "seal.fill", withConfiguration: stickerSymbolConfig), for: .normal)
+        stickerButton?.tintColor = .white
         
         drawButton?.setTitle("\u{E905}", for: .normal)
         drawButton?.titleLabel?.font = icomoonFont
@@ -373,7 +379,15 @@ public final class PhotoEditorViewController: UIViewController {
         colorsCollectionView.collectionViewLayout = layout
         colorsCollectionViewDelegate = ColorsCollectionViewDelegate()
         colorsCollectionViewDelegate.colorDelegate = self
-        if !colors.isEmpty {
+        if colors.count == 1 {
+            // Only one color available: apply it and hide the swatch row.
+            let only = colors[0]
+            drawColor = only
+            textColor = only
+            colorsCollectionViewDelegate.colors = colors
+            colorsCollectionView.isHidden = true
+            colorsPickerAvailable = false
+        } else if !colors.isEmpty {
             colorsCollectionViewDelegate.colors = colors
         }
         colorsCollectionView.delegate = colorsCollectionViewDelegate
@@ -383,13 +397,39 @@ public final class PhotoEditorViewController: UIViewController {
             ColorCollectionViewCell.self,
             forCellWithReuseIdentifier: "ColorCollectionViewCell")
     }
+
+    /// Show or hide the color picker bar, respecting current child visibility.
+    /// The bar stays hidden if neither the color swatches nor the marker size
+    /// picker would be visible — avoids showing an empty bar (e.g. during text
+    /// editing with a single configured color, when the marker picker is hidden
+    /// outside drawing mode).
+    ///
+    /// Callers that also toggle `markerSizeCollectionView?.isHidden` must set
+    /// that first, so this helper sees the up-to-date child state.
+    func setColorPickerBarVisible(_ visible: Bool) {
+        if !visible {
+            colorPickerView.isHidden = true
+            return
+        }
+        let colorsVisible = colorsPickerAvailable && !colorsCollectionView.isHidden
+        let markerVisible = !(markerSizeCollectionView?.isHidden ?? true)
+        colorPickerView.isHidden = !(colorsVisible || markerVisible)
+    }
     
     private func setupMarkerSizePicker() {
         guard !hiddenControls.contains(.markerSize) else { return }
         // Filter out invalid values, enforce minimum of 1, and limit to 5
         let sanitized = markerSizes.filter { $0.isFinite && $0 > 0 }.map { max($0, 1) }.sorted().prefix(5)
         let sizes = Array(sanitized)
-        guard !sizes.isEmpty else { return }
+        // With 0 or 1 sizes the picker offers no choice, so hide it:
+        //  - 0 sizes: keep the default drawLineWidth
+        //  - 1 size:  always use that size for draw and line
+        guard sizes.count > 1 else {
+            if let single = sizes.first {
+                drawLineWidth = single
+            }
+            return
+        }
 
         let layout = UICollectionViewFlowLayout()
         layout.scrollDirection = .horizontal
@@ -590,25 +630,31 @@ public final class PhotoEditorViewController: UIViewController {
         btn.layer.shadowOpacity = 0.15
         btn.layer.shadowRadius = 1.0
         btn.addTarget(self, action: #selector(lineButtonTapped(_:)), for: .touchUpInside)
+        addPressFeedback(to: btn)
 
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(lineButtonLongPressed(_:)))
         btn.addGestureRecognizer(longPress)
 
-        // Insert right after the draw button
-        if let drawIndex = stackView.arrangedSubviews.firstIndex(of: drawButton) {
-            stackView.insertArrangedSubview(btn, at: drawIndex + 1)
-        } else {
-            stackView.addArrangedSubview(btn)
-        }
-
         lineButton = btn
+
+        // The top toolbar stack is trailing-anchored, so the LAST arranged subview
+        // appears on the right. Order so draw is rightmost, line left of draw,
+        // sticker left of line, then text/crop/rotate further left.
+        let ordered: [UIButton?] = [rotateButton, cropButton, textButton,
+                                    stickerButton, lineButton, drawButton]
+        for view in stackView.arrangedSubviews {
+            stackView.removeArrangedSubview(view)
+        }
+        for button in ordered {
+            if let b = button { stackView.addArrangedSubview(b) }
+        }
     }
 
     @objc private func lineButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, isLineDrawing else { return }
         pickerHiddenWhileDrawing.toggle()
-        colorPickerView.isHidden = pickerHiddenWhileDrawing
         markerSizeCollectionView?.isHidden = pickerHiddenWhileDrawing
+        setColorPickerBarVisible(!pickerHiddenWhileDrawing)
     }
 
     private func setupDrawButtonLongPress() {
@@ -619,8 +665,8 @@ public final class PhotoEditorViewController: UIViewController {
     @objc private func drawButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, isDrawing else { return }
         pickerHiddenWhileDrawing.toggle()
-        colorPickerView.isHidden = pickerHiddenWhileDrawing
         markerSizeCollectionView?.isHidden = pickerHiddenWhileDrawing
+        setColorPickerBarVisible(!pickerHiddenWhileDrawing)
     }
     
     // MARK: - Color Persistence
