@@ -38,10 +38,6 @@ public final class PhotoEditorViewController: UIViewController {
     @IBOutlet var topGradientTopConstraint: NSLayoutConstraint!
     @IBOutlet var colorPickerTopConstraint: NSLayoutConstraint!
     @IBOutlet var doneButtonTopConstraint: NSLayoutConstraint!
-    // Intentionally weak — only deactivated, never reassigned. If a future
-    // change reassigns it, switch to strong (see the four top constraints above).
-    @IBOutlet weak var cancelButtonLeadingConstraint: NSLayoutConstraint!
-    
     //Controls
     @IBOutlet weak var cropButton: UIButton!
     @IBOutlet weak var stickerButton: UIButton!
@@ -89,10 +85,140 @@ public final class PhotoEditorViewController: UIViewController {
     public var markerSizes: [CGFloat] = [5, 8, 12, 18]
 
     public weak var photoEditorDelegate: PhotoEditorDelegate?
+    /**
+     Optional provider for AI-generated annotations. When set, a "sparkles" button
+     appears in the top toolbar. Tapping it hands the current base image to the
+     provider and applies returned annotations as editable subviews. The library
+     itself imports no AI frameworks — the host app chooses the backend.
+     Hide the button via `.ai` in `hiddenControls`.
+     */
+    public weak var aiProvider: PhotoEditorAIProvider? {
+        didSet { aiButton?.isHidden = hiddenControls.contains(.ai) || aiProvider == nil }
+    }
+
+    /// Optional delegate notified when an AI provider call throws.
+    /// The editor swallows the error (canvas unchanged, no snapshot); this
+    /// lets the host surface the failure to the user.
+    public weak var aiDelegate: PhotoEditorAIDelegate?
+
+    /**
+     Longest-edge pixel cap for the image handed to `aiProvider`. Default 2048.
+     The editor composites the current base image with any user annotations,
+     then scales so `max(width, height) <= aiMaxImageDimension` before calling
+     the provider. Smaller values cut token/bandwidth cost; larger values give
+     vision models more detail. Returned annotation coordinates are interpreted
+     as being in the coord space of the image the provider received, and the
+     library rescales them back to original resolution before rendering.
+     Set to a very large value (e.g. `.greatestFiniteMagnitude`) to disable.
+     */
+    public var aiMaxImageDimension: CGFloat = 2048
+
+    /**
+     Annotation kinds the AI provider is permitted to produce on this editor.
+     Default: all four (`.text`, `.box`, `.ellipse`, `.arrow`). Restrict to a
+     subset to prevent the model from returning other kinds; the library passes
+     this set to the provider so it can omit disallowed tools from its prompt,
+     and filters returned annotations against it as a safety net.
+     Future preset prompts may further narrow this set per-prompt (intersection).
+     */
+    public var aiAllowedTools: Set<PhotoEditorAITool> = Set(PhotoEditorAITool.allCases)
+
+    /**
+     Named stickers the AI provider may reference via `.sticker(id:at:size:)`.
+     Each has an `id` (quoted back by the provider) and a `name` (shown to
+     the AI in the catalog so it knows what each sticker represents — e.g.
+     `"checkmark"`, `"warning-triangle"`, `"company-logo"`).
+     Empty (default) means the sticker tool is effectively unavailable even
+     if `.sticker` is in `aiAllowedTools`.
+     */
+    public var namedStickers: [PhotoEditorSticker] = []
+
+    /**
+     Host-supplied metadata passed to the AI provider on every request.
+     Typical keys: `"projectName"`, `"datetime"`, `"latitude"`, `"longitude"`,
+     `"capturedBy"`. The library does not extract EXIF — the host decides
+     what's safe and relevant to share.
+     */
+    public var aiContext: [String: String] = [:]
+
+    /**
+     When true, AI-generated annotations are placed in a "pending" state
+     with a visual tint and a review toolbar (Accept / Decline / Revise).
+     The host's undo stack is not mutated until the user accepts.
+     Default: `false` (annotations commit immediately).
+     */
+    public var aiReviewBeforeCommit: Bool = false
+
+    /**
+     Host-defined preset prompts shown in the picker when the user taps the
+     sparkles button. See `PhotoEditorAIPrompt` for the structure. Empty
+     (default) skips the preset list.
+     */
+    public var aiPresetPrompts: [PhotoEditorAIPrompt] = []
+
+    /**
+     When true, the AI picker includes a "Custom…" entry that lets the user
+     type their own instruction. Default `false`. Combine with
+     `aiPresetPrompts` to offer both; leave presets empty for custom-only.
+     */
+    public var aiAllowCustomPrompt: Bool = false
+
+    /**
+     Text appended to any user-typed custom prompt (including Revise).
+     Useful for host-wide style rules — e.g. `"Always use a green font"`
+     or `"Only annotate the foreground subject."` Ignored for preset
+     prompts, since those already reflect the host's full instruction.
+     */
+    public var aiCustomPromptSuffix: String? = nil
+
+    // Review-flow runtime state — set between provider return and Accept/Decline/Revise.
+    var pendingAIAnnotationViews: [UIView] = []
+    var lastAISentImage: UIImage?
+    var lastAISentScale: CGFloat = 1.0
+    var lastAIAnnotations: [PhotoEditorAnnotation] = []
+    var aiReviewToolbar: UIView?
+    var isInAIReview: Bool { !pendingAIAnnotationViews.isEmpty || aiReviewToolbar != nil }
+
+    /**
+     Shapes to expose in the top-toolbar shapes button. Default is empty (button hidden).
+     Host populates with `[.box, .ellipse, .arrow]` (or any subset) to enable.
+     Long-press on the button cycles through the provided kinds.
+     */
+    public var availableShapes: [PhotoEditorShape] = [] {
+        didSet {
+            if !availableShapes.contains(currentShapeKind), let first = availableShapes.first {
+                currentShapeKind = first
+                refreshShapesButtonIcon()
+            }
+            updateShapesButtonVisibility()
+        }
+    }
     var colorsCollectionViewDelegate: ColorsCollectionViewDelegate!
     
     // list of controls to be hidden
     public var hiddenControls : [control] = []
+
+    /**
+     Left-to-right order of buttons in the top-right toolbar stack.
+     Set this before the view loads to override the default layout.
+     Controls not listed here are removed from the stack — use `hiddenControls`
+     instead if you only want to hide a button while preserving its slot.
+     `.undoRedo`, `.markerSize`, `.emoji`, `.save`, `.share`, `.clear`, and
+     `.panZoom` do not live in this stack and are ignored.
+     Default: `[.rotate, .crop, .text, .sticker, .shapes, .ai, .line, .draw]`
+     (`.draw` rightmost / closest to the user's thumb).
+     */
+    public var topRightToolbarOrder: [control] = [.rotate, .crop, .text, .sticker, .shapes, .ai, .line, .draw]
+
+    /**
+     Left-to-right order of buttons in the bottom-left toolbar stack.
+     Set this before the view loads to override the default layout.
+     Controls not listed here are removed from the stack.
+     `.panZoom` represents both the pan/grab toggle and the reset-zoom button —
+     they always appear together as a pair at that position.
+     Default: `[.save, .share, .clear, .panZoom]`.
+     */
+    public var bottomLeftToolbarOrder: [control] = [.save, .share, .clear, .panZoom]
 
     private static let cPostHighlight = UIColor(red:0.200, green:0.600, blue:0.800, alpha:0.800)
     
@@ -104,6 +230,14 @@ public final class PhotoEditorViewController: UIViewController {
     var lineStartCanvasPoint: CGPoint?
     var linePreviewLayer: CAShapeLayer?
     var lineButton: UIButton?
+    var aiButton: UIButton?
+    var shapesButton: UIButton?
+
+    // Shape drawing state (parallel to isLineDrawing / lineStartCanvasPoint / linePreviewLayer)
+    var isShapeDrawing: Bool = false
+    var currentShapeKind: PhotoEditorShape = .box
+    var shapeStartCanvasPoint: CGPoint?
+    var shapePreviewLayer: CAShapeLayer?
     var pickerHiddenWhileDrawing: Bool = false
     var hasImageBeenModified: Bool = false {
         didSet { updateActionButtons() }
@@ -177,6 +311,10 @@ public final class PhotoEditorViewController: UIViewController {
         linePreviewLayer?.removeFromSuperlayer()
         linePreviewLayer = nil
         lineButton = nil
+        aiButton = nil
+        shapesButton = nil
+        shapePreviewLayer?.removeFromSuperlayer()
+        shapePreviewLayer = nil
         panGrabButton = nil
         resetZoomButton = nil
         drawingOverlayView?.image = nil
@@ -212,11 +350,15 @@ public final class PhotoEditorViewController: UIViewController {
         setupMarkerSizePicker()
         stickersViewController = StickersViewController(nibName: "StickersViewController", bundle: Bundle.module)
         setupLineButton()
+        setupShapesButton()
+        setupAIButton()
         setupDrawButtonLongPress()
         setupUndoRedoButtons()
         setupCanvasZoomGestures()
         setupPanGrabToggle()
+        applyToolbarButtonOrders()
         hideControls()
+        tightenToolbarSpacingIfNeeded()
         updateActionButtons()
         anchorTopConstraintsToSafeArea()
 
@@ -237,7 +379,15 @@ public final class PhotoEditorViewController: UIViewController {
 
         // Use full screen bounds for simpler sizing
         let currentScreenBounds = view.bounds.size
-        
+
+        // Re-evaluate toolbar overflow when orientation flips (portrait ↔ landscape).
+        let isPortraitNow = currentScreenBounds.height >= currentScreenBounds.width
+        if lastLayoutWasPortrait != isPortraitNow {
+            lastLayoutWasPortrait = isPortraitNow
+            applyToolbarButtonOrders()
+            tightenToolbarSpacingIfNeeded()
+        }
+
         // Set image after views are laid out to get correct bounds
         if imageView.image == nil && image != nil {
             self.setImageView(image: image!)
@@ -251,11 +401,19 @@ public final class PhotoEditorViewController: UIViewController {
             previousCanvasBounds = currentScreenBounds
         }
     }
+
+    private var lastLayoutWasPortrait: Bool?
     
     /// Call once from viewDidLoad. Deactivates the xib's top constraints
     /// (pinned to `view.top` with baked-in 44/44/50/55 constants) and
     /// re-anchors them to `safeAreaLayoutGuide.topAnchor` so UIKit tracks
     /// safe-area changes automatically — no race with the first layout pass.
+    ///
+    /// Also insets the topToolbar horizontally to the safe-area guide so
+    /// both ends (cancel button, right-side button stack) clear the notch
+    /// / Dynamic Island / home-indicator in landscape — without needing
+    /// per-child safe-area anchors. On iPadOS 26 we use the corner-adapted
+    /// safe area so Stage Manager traffic-light chrome is honored too.
     private func anchorTopConstraintsToSafeArea() {
         topToolbarTopConstraint?.isActive = false
         topGradientTopConstraint?.isActive = false
@@ -273,6 +431,42 @@ public final class PhotoEditorViewController: UIViewController {
             topGradientTopConstraint,
             colorPickerTopConstraint,
             doneButtonTopConstraint
+        ])
+
+        anchorTopToolbarHorizontallyToSafeArea()
+    }
+
+    /// Replace the xib's edge-to-edge leading/trailing constraints on the
+    /// top toolbar with ones anchored to the horizontal safe-area guide.
+    /// This shifts the entire toolbar inside the notch / home-indicator
+    /// inset in landscape, so the cancel button (pinned to `topToolbar.leading + 12`)
+    /// and the right button stack (pinned to `topToolbar.trailing - 12`) stay
+    /// symmetric without each child having its own safe-area constraint.
+    private func anchorTopToolbarHorizontallyToSafeArea() {
+        // Deactivate any existing superview-owned leading/trailing constraints
+        // that target `topToolbar` so our replacements don't fight the xib.
+        for c in view.constraints {
+            guard c.firstItem as? UIView === topToolbar || c.secondItem as? UIView === topToolbar else { continue }
+            let attrs: [NSLayoutConstraint.Attribute] = [.leading, .trailing, .left, .right]
+            if attrs.contains(c.firstAttribute) || attrs.contains(c.secondAttribute) {
+                c.isActive = false
+            }
+        }
+
+        let leadingAnchor: NSLayoutXAxisAnchor
+        let trailingAnchor: NSLayoutXAxisAnchor
+        if #available(iOS 26.0, *) {
+            let g = view.layoutGuide(for: .safeArea(cornerAdaptation: .horizontal))
+            leadingAnchor  = g.leadingAnchor
+            trailingAnchor = g.trailingAnchor
+        } else {
+            leadingAnchor  = view.safeAreaLayoutGuide.leadingAnchor
+            trailingAnchor = view.safeAreaLayoutGuide.trailingAnchor
+        }
+
+        NSLayoutConstraint.activate([
+            topToolbar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            topToolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
     }
     
@@ -526,6 +720,8 @@ public final class PhotoEditorViewController: UIViewController {
             lineButton?.isHidden = true
             stickerButton?.isHidden = true
             textButton?.isHidden = true
+            aiButton?.isHidden = true
+            shapesButton?.isHidden = true
         } else {
             // Respect hiddenControls when showing items back
             rotateButton?.isHidden = hiddenControls.contains(.rotate)
@@ -534,7 +730,13 @@ public final class PhotoEditorViewController: UIViewController {
             lineButton?.isHidden = hiddenControls.contains(.line)
             stickerButton?.isHidden = hiddenControls.contains(.sticker)
             textButton?.isHidden = hiddenControls.contains(.text)
+            aiButton?.isHidden = hiddenControls.contains(.ai) || aiProvider == nil
+            updateShapesButtonVisibility()
         }
+    }
+
+    func updateShapesButtonVisibility() {
+        shapesButton?.isHidden = hiddenControls.contains(.shapes) || availableShapes.isEmpty
     }
 
     func hideToolbar(hide: Bool) {
@@ -617,6 +819,240 @@ public final class PhotoEditorViewController: UIViewController {
         }
     }
 
+    /// Map a `control` enum case to the button (if any) that lives in a toolbar stack.
+    /// Returns nil for controls that aren't toolbar-stack buttons (e.g. `.undoRedo`).
+    private func toolbarButton(for ctrl: control) -> UIButton? {
+        switch ctrl {
+        case .rotate:    return rotateButton
+        case .crop:      return cropButton
+        case .sticker:   return stickerButton
+        case .text:      return textButton
+        case .draw:      return drawButton
+        case .line:      return lineButton
+        case .ai:        return aiButton
+        case .shapes:    return shapesButton
+        case .save:      return saveButton
+        case .share:     return shareButton
+        case .clear:     return clearButton
+        case .panZoom:   return panGrabButton  // resetZoomButton is paired in apply()
+        case .undoRedo, .markerSize, .emoji:
+            return nil
+        }
+    }
+
+    /// Re-arrange the top-right and bottom-left toolbar stacks per
+    /// `topRightToolbarOrder` / `bottomLeftToolbarOrder`. Buttons not listed in
+    /// the order arrays are removed from their stack (they remain in memory and
+    /// can still be referenced, just not laid out by the stack).
+    func applyToolbarButtonOrders() {
+        applyOrder(topRightToolbarOrder, to: drawButton?.superview as? UIStackView)
+        applyOrder(bottomLeftToolbarOrder, to: saveButton?.superview as? UIStackView)
+        applyTopToolbarOverflow()
+        installLastSelectedTracking()
+    }
+
+    /// The XIB ships with 15pt stack spacing sized for the original 5-button
+    /// toolbar. With shapes + AI + line added (up to 8 icons), the icons get
+    /// visually cramped. Scale spacing down once the count grows. Call this
+    /// AFTER `hideControls()` so hidden buttons don't inflate the count.
+    func tightenToolbarSpacingIfNeeded() {
+        if let topStack = drawButton?.superview as? UIStackView {
+            let visible = topStack.arrangedSubviews.filter { !$0.isHidden }.count
+            topStack.spacing = visible >= 7 ? 6 : (visible == 6 ? 10 : 15)
+        }
+    }
+
+    // MARK: - Top toolbar overflow
+    //
+    // On iPhone portrait, limit the top-right stack to 5 slots, laid out
+    // left-to-right as:
+    //   slots 1–2: `.rotate` and `.crop` (in their configured order, stay put).
+    //   slot 3:    MRU "rotating" slot — last-selected non-fixed control.
+    //              Defaults to the first non-fixed entry in
+    //              `topRightToolbarOrder` (usually `.text`).
+    //   slot 4:    the right-most entry of `topRightToolbarOrder` — pinned
+    //              so the host's "primary" action (defaults to `.draw`) is
+    //              always one tap away, right next to the overflow.
+    //   slot 5:    overflow ellipsis with the remaining controls in a UIMenu.
+    // iPad / landscape skip overflow and show every button in order.
+    //
+    // "Fixed" controls (never overflow): `.rotate`, `.crop`, and the last
+    // entry in `topRightToolbarOrder`. Everything else rotates through MRU.
+
+    private var overflowButton: UIButton?
+    private var lastSelectedToolbarControl: control?
+
+    private var shouldShowTopOverflow: Bool {
+        let isPhone = traitCollection.userInterfaceIdiom == .phone
+        let isPortrait = view.bounds.height >= view.bounds.width
+        return isPhone && isPortrait
+    }
+
+    private func applyTopToolbarOverflow() {
+        guard let stack = drawButton?.superview as? UIStackView else { return }
+
+        // Remove any prior overflow button.
+        if let btn = overflowButton {
+            stack.removeArrangedSubview(btn)
+            btn.removeFromSuperview()
+            overflowButton = nil
+        }
+        // Reset overflow-driven hiding; permanent hiding is reapplied below.
+        for ctrl in topRightToolbarOrder {
+            guard let btn = toolbarButton(for: ctrl), btn.superview === stack else { continue }
+            btn.isHidden = isPermanentlyHidden(ctrl)
+        }
+
+        guard shouldShowTopOverflow else { return }
+
+        let visibleOrder = topRightToolbarOrder.filter { ctrl in
+            guard let btn = toolbarButton(for: ctrl) else { return false }
+            return btn.superview === stack && !btn.isHidden
+        }
+        guard visibleOrder.count > 5 else { return }
+
+        // Fixed controls: .rotate, .crop (leftmost), and the last-in-order
+        // (pinned right-most, next to overflow).
+        let pinnedRightmost = visibleOrder.last
+        let isFixed: (control) -> Bool = { ctrl in
+            ctrl == .rotate || ctrl == .crop || ctrl == pinnedRightmost
+        }
+
+        let leftFixed = visibleOrder.filter { $0 == .rotate || $0 == .crop }  // in order
+        let rotatables = visibleOrder.filter { !isFixed($0) }                  // rotating pool
+
+        // Slot 3: last-selected non-fixed, falling back to the first rotatable.
+        guard let defaultMRU = rotatables.first else { return }
+        let mru: control = {
+            if let last = lastSelectedToolbarControl,
+               !isFixed(last),
+               rotatables.contains(last) {
+                return last
+            }
+            return defaultMRU
+        }()
+
+        // Layout: leftFixed (rotate/crop), MRU, pinnedRightmost, overflow.
+        var kept = leftFixed + [mru]
+        if let right = pinnedRightmost, !kept.contains(right) { kept.append(right) }
+        let overflow = visibleOrder.filter { !kept.contains($0) }
+
+        // Arrange the kept buttons in order; overflow button goes last.
+        for (i, ctrl) in kept.enumerated() {
+            guard let btn = toolbarButton(for: ctrl), btn.superview === stack else { continue }
+            stack.removeArrangedSubview(btn)
+            stack.insertArrangedSubview(btn, at: i)
+        }
+        for ctrl in overflow { toolbarButton(for: ctrl)?.isHidden = true }
+
+        let btn = makeOverflowButton(for: overflow)
+        stack.addArrangedSubview(btn)
+        overflowButton = btn
+    }
+
+    private func isPermanentlyHidden(_ ctrl: control) -> Bool {
+        if hiddenControls.contains(ctrl) { return true }
+        if ctrl == .ai,     aiProvider == nil          { return true }
+        if ctrl == .shapes, availableShapes.isEmpty    { return true }
+        return false
+    }
+
+    private func makeOverflowButton(for controls: [control]) -> UIButton {
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        let btn = UIButton(type: .custom)
+        btn.setImage(UIImage(systemName: "ellipsis.circle", withConfiguration: config), for: .normal)
+        btn.tintColor = .white
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        btn.layer.shadowOpacity = 0.15
+        btn.layer.shadowRadius = 1.0
+        addPressFeedback(to: btn)
+
+        let actions: [UIMenuElement] = controls.compactMap { ctrl in
+            guard let target = toolbarButton(for: ctrl) else { return nil }
+            return UIAction(title: overflowMenuTitle(for: ctrl),
+                            image: overflowMenuImage(for: ctrl)) { [weak self, weak target] _ in
+                self?.lastSelectedToolbarControl = ctrl
+                target?.sendActions(for: .touchUpInside)
+                DispatchQueue.main.async { self?.applyToolbarButtonOrders() }
+            }
+        }
+        btn.menu = UIMenu(title: "", children: actions)
+        btn.showsMenuAsPrimaryAction = true
+        return btn
+    }
+
+    private func overflowMenuTitle(for ctrl: control) -> String {
+        switch ctrl {
+        case .rotate:  return "Rotate"
+        case .crop:    return "Crop"
+        case .text:    return "Text"
+        case .sticker: return "Sticker"
+        case .shapes:  return "Shape"
+        case .ai:      return "AI"
+        case .line:    return "Line"
+        case .draw:    return "Draw"
+        default:       return ""
+        }
+    }
+
+    private func overflowMenuImage(for ctrl: control) -> UIImage? {
+        let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
+        switch ctrl {
+        case .rotate:  return UIImage(systemName: "rotate.right", withConfiguration: config)
+        case .crop:    return UIImage(systemName: "crop", withConfiguration: config)
+        case .text:    return UIImage(systemName: "textformat", withConfiguration: config)
+        case .sticker: return UIImage(systemName: "face.smiling", withConfiguration: config)
+        case .shapes:  return UIImage(systemName: "square.on.circle", withConfiguration: config)
+        case .ai:      return UIImage(systemName: "sparkles", withConfiguration: config)
+        case .line:    return UIImage(systemName: "line.diagonal", withConfiguration: config)
+        case .draw:    return UIImage(systemName: "pencil.tip", withConfiguration: config)
+        default:       return nil
+        }
+    }
+
+    private func installLastSelectedTracking() {
+        // Only track controls eligible for the MRU slot (excludes the fixed
+        // slots: .rotate, .crop, and the pinned right-most).
+        let pinnedRightmost = topRightToolbarOrder.last
+        for ctrl in topRightToolbarOrder
+            where ctrl != .rotate && ctrl != .crop && ctrl != pinnedRightmost {
+            guard let btn = toolbarButton(for: ctrl) else { continue }
+            let id = "photoEditor.lastSelected.\(ctrl)"
+            btn.removeAction(identifiedBy: .init(id), for: .touchUpInside)
+            btn.addAction(UIAction(identifier: .init(id)) { [weak self] _ in
+                self?.lastSelectedToolbarControl = ctrl
+                DispatchQueue.main.async { self?.applyToolbarButtonOrders() }
+            }, for: .touchUpInside)
+        }
+    }
+
+    private func applyOrder(_ order: [control], to stackView: UIStackView?) {
+        guard let stack = stackView else { return }
+
+        // Snapshot first so we can drop unmentioned buttons after re-arranging.
+        let original = stack.arrangedSubviews
+
+        var added = Set<UIView>()
+        for ctrl in order {
+            if let btn = toolbarButton(for: ctrl), btn.superview === stack, added.insert(btn).inserted {
+                stack.removeArrangedSubview(btn)
+                stack.addArrangedSubview(btn)
+            }
+            // .panZoom carries both panGrabButton and resetZoomButton as a pair.
+            if ctrl == .panZoom, let reset = resetZoomButton, reset.superview === stack, added.insert(reset).inserted {
+                stack.removeArrangedSubview(reset)
+                stack.addArrangedSubview(reset)
+            }
+        }
+
+        // Anything originally in the stack that wasn't mentioned: remove from layout.
+        for view in original where !added.contains(view) {
+            stack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+    }
+
     private func setupLineButton() {
         guard let drawButton = drawButton,
               let stackView = drawButton.superview as? UIStackView else { return }
@@ -636,18 +1072,99 @@ public final class PhotoEditorViewController: UIViewController {
         btn.addGestureRecognizer(longPress)
 
         lineButton = btn
+        // Append to the stack; final left-to-right ordering is applied by
+        // applyToolbarButtonOrders() once all dynamic buttons exist.
+        stackView.addArrangedSubview(btn)
+    }
 
-        // The top toolbar stack is trailing-anchored, so the LAST arranged subview
-        // appears on the right. Order so draw is rightmost, line left of draw,
-        // sticker left of line, then text/crop/rotate further left.
-        let ordered: [UIButton?] = [rotateButton, cropButton, textButton,
-                                    stickerButton, lineButton, drawButton]
-        for view in stackView.arrangedSubviews {
-            stackView.removeArrangedSubview(view)
+    private func setupShapesButton() {
+        guard let drawButton = drawButton,
+              let stackView = drawButton.superview as? UIStackView else { return }
+
+        let btn = UIButton(type: .custom)
+        btn.tintColor = .white
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        btn.layer.shadowOpacity = 0.15
+        btn.layer.shadowRadius = 1.0
+        btn.addTarget(self, action: #selector(shapesButtonTapped(_:)), for: .touchUpInside)
+        addPressFeedback(to: btn)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(shapesButtonLongPressed(_:)))
+        btn.addGestureRecognizer(longPress)
+
+        shapesButton = btn
+        // Append to the stack; final left-to-right ordering is applied by
+        // applyToolbarButtonOrders() once all dynamic buttons exist.
+        stackView.addArrangedSubview(btn)
+
+        refreshShapesButtonIcon()
+        updateShapesButtonVisibility()
+    }
+
+    @objc private func shapesButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else { return }
+        guard availableShapes.count > 1 else { return }
+        let currentIndex = availableShapes.firstIndex(of: currentShapeKind) ?? -1
+        let nextIndex = (currentIndex + 1) % availableShapes.count
+        currentShapeKind = availableShapes[nextIndex]
+        refreshShapesButtonIcon()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func refreshShapesButtonIcon() {
+        guard let btn = shapesButton else { return }
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        let symbol: String
+        switch currentShapeKind {
+        case .box:     symbol = "rectangle"
+        case .ellipse: symbol = "circle"
+        case .arrow:   symbol = "arrow.up.right"
         }
-        for button in ordered {
-            if let b = button { stackView.addArrangedSubview(b) }
+        btn.setImage(UIImage(systemName: symbol, withConfiguration: config), for: .normal)
+    }
+
+    private let shapesHighlightTag = 9997
+
+    func showShapesButtonHighlight(_ show: Bool) {
+        guard let shapesButton = shapesButton else { return }
+        if show {
+            guard shapesButton.superview?.viewWithTag(shapesHighlightTag) == nil else { return }
+            let size: CGFloat = 35
+            let highlight = UIView(frame: CGRect(
+                x: shapesButton.frame.midX - size / 2,
+                y: shapesButton.frame.midY - size / 2,
+                width: size, height: size))
+            highlight.tag = shapesHighlightTag
+            highlight.backgroundColor = UIColor.white.withAlphaComponent(0.25)
+            highlight.layer.cornerRadius = size / 2
+            highlight.isUserInteractionEnabled = false
+            shapesButton.superview?.insertSubview(highlight, belowSubview: shapesButton)
+        } else {
+            shapesButton.superview?.viewWithTag(shapesHighlightTag)?.removeFromSuperview()
         }
+    }
+
+    private func setupAIButton() {
+        guard let drawButton = drawButton,
+              let stackView = drawButton.superview as? UIStackView else { return }
+
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        let btn = UIButton(type: .custom)
+        btn.setImage(UIImage(systemName: "sparkles", withConfiguration: config), for: .normal)
+        btn.tintColor = .white
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 1.0, height: 0.0)
+        btn.layer.shadowOpacity = 0.15
+        btn.layer.shadowRadius = 1.0
+        btn.addTarget(self, action: #selector(aiButtonTapped(_:)), for: .touchUpInside)
+        addPressFeedback(to: btn)
+
+        aiButton = btn
+        // Append; final left-to-right ordering is applied by applyToolbarButtonOrders().
+        stackView.addArrangedSubview(btn)
+
+        btn.isHidden = hiddenControls.contains(.ai) || aiProvider == nil
     }
 
     @objc private func lineButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
@@ -865,22 +1382,14 @@ public final class PhotoEditorViewController: UIViewController {
         })
 
         if let cancelButton = cancelButton {
-            // On iPadOS 26+ use the corner-adapted safe-area guide so the
-            // cancel button shifts past the Stage Manager traffic-light pill
-            // when windowed (same mechanism UINavigationBar uses). Use
-            // .safeArea (not .margins) so the baseline leading inset on iPad
-            // fullscreen stays at 0 — avoids double-counting against the
-            // `constant: 12` below. Fall back to safeAreaLayoutGuide on iOS ≤ 25.
-            cancelButtonLeadingConstraint?.isActive = false
-            let leadingAnchor: NSLayoutXAxisAnchor
-            if #available(iOS 26.0, *) {
-                let guide = view.layoutGuide(for: .safeArea(cornerAdaptation: .horizontal))
-                leadingAnchor = guide.leadingAnchor
-            } else {
-                leadingAnchor = view.safeAreaLayoutGuide.leadingAnchor
-            }
+            // The xib pins the cancel button to `topToolbar.leading + 12`, and
+            // `anchorTopToolbarHorizontallyToSafeArea()` shifts the entire toolbar
+            // inside the notch / Stage Manager chrome in landscape and on iPad.
+            // That means we can keep the xib constraint as-is — the cancel button
+            // and the right button stack stay symmetric, inset equally from the
+            // visible safe-area edges. Only the undo/redo stack needs explicit
+            // positioning relative to the cancel button.
             NSLayoutConstraint.activate([
-                cancelButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
                 stack.centerYAnchor.constraint(equalTo: topToolbar.centerYAnchor),
                 stack.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 12)
             ])
@@ -1038,7 +1547,7 @@ public final class PhotoEditorViewController: UIViewController {
 
     @objc private func undoTapped() {
         // Don't undo mid-stroke
-        guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
+        guard lastPoint == nil && lineStartCanvasPoint == nil && shapeStartCanvasPoint == nil && !isInAIReview else { return }
         let current = createSnapshot()
         if let snapshot = editorUndoManager.undo(currentState: current) {
             restoreSnapshot(snapshot)
@@ -1046,7 +1555,7 @@ public final class PhotoEditorViewController: UIViewController {
     }
 
     @objc private func redoTapped() {
-        guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
+        guard lastPoint == nil && lineStartCanvasPoint == nil && shapeStartCanvasPoint == nil && !isInAIReview else { return }
         let current = createSnapshot()
         if let snapshot = editorUndoManager.redo(currentState: current) {
             restoreSnapshot(snapshot, isRedo: true)

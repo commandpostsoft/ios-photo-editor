@@ -53,6 +53,22 @@ public extension UIImage {
     }
     
     /**
+     Returns a copy with the longest edge scaled down to `maxDimension` (aspect
+     preserved). If the image is already within the limit, `self` is returned
+     unchanged. Used by the AI pipeline to cap request size.
+     */
+    func resized(toMaxDimension maxDimension: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxDimension, longest > 0 else { return self }
+        let ratio = maxDimension / longest
+        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /**
      Rotates the image by the specified radians
      */
     func rotate(radians: CGFloat) -> UIImage {

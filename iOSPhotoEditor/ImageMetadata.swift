@@ -21,6 +21,68 @@ public struct ImageMetadata {
         return properties
     }
 
+    /// Picks a small set of commonly-useful EXIF / GPS / TIFF fields and
+    /// flattens them into a `[String: String]` dictionary suitable for
+    /// `PhotoEditorViewController.aiContext`. Keys returned (all optional —
+    /// only present ones are included):
+    ///
+    ///   - `datetime`       — EXIF DateTimeOriginal (local time of capture)
+    ///   - `camera.make`    — TIFF Make
+    ///   - `camera.model`   — TIFF Model
+    ///   - `lens.model`     — EXIF LensModel
+    ///   - `gps.latitude`   — signed decimal degrees (GPSLatitudeRef applied)
+    ///   - `gps.longitude`  — signed decimal degrees (GPSLongitudeRef applied)
+    ///   - `gps.altitude`   — meters above sea level (signed)
+    ///
+    /// Usage:
+    /// ```swift
+    /// if let data = try? Data(contentsOf: imageURL) {
+    ///     editor.aiContext.merge(ImageMetadata.summarize(from: data)) { host, _ in host }
+    /// }
+    /// ```
+    ///
+    /// Host-set values in `aiContext` win on key collision in the example
+    /// above — swap the merge closure if you want EXIF to override.
+    public static func summarize(from data: Data) -> [String: String] {
+        guard let properties = extractProperties(from: data) else { return [:] }
+        var out: [String: String] = [:]
+
+        let exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
+        let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+        let gps  = properties[kCGImagePropertyGPSDictionary  as String] as? [String: Any] ?? [:]
+
+        if let dt = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+            out["datetime"] = dt
+        }
+        if let make = tiff[kCGImagePropertyTIFFMake as String] as? String {
+            out["camera.make"] = make
+        }
+        if let model = tiff[kCGImagePropertyTIFFModel as String] as? String {
+            out["camera.model"] = model
+        }
+        if let lens = exif[kCGImagePropertyExifLensModel as String] as? String {
+            out["lens.model"] = lens
+        }
+
+        if let lat = gps[kCGImagePropertyGPSLatitude as String] as? Double {
+            let ref = gps[kCGImagePropertyGPSLatitudeRef as String] as? String
+            let signed = (ref == "S") ? -lat : lat
+            out["gps.latitude"] = String(format: "%.6f", signed)
+        }
+        if let lon = gps[kCGImagePropertyGPSLongitude as String] as? Double {
+            let ref = gps[kCGImagePropertyGPSLongitudeRef as String] as? String
+            let signed = (ref == "W") ? -lon : lon
+            out["gps.longitude"] = String(format: "%.6f", signed)
+        }
+        if let alt = gps[kCGImagePropertyGPSAltitude as String] as? Double {
+            let ref = gps[kCGImagePropertyGPSAltitudeRef as String] as? Int
+            let signed = (ref == 1) ? -alt : alt
+            out["gps.altitude"] = String(format: "%.2f", signed)
+        }
+
+        return out
+    }
+
     /// Creates new image data with metadata from the source re-embedded.
     ///
     /// The orientation tag is stripped (since `UIImage` is already oriented),

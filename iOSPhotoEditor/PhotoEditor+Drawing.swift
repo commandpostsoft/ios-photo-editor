@@ -42,6 +42,8 @@ extension PhotoEditorViewController {
                     linePreviewLayer = layer
                 }
             }
+        } else if isShapeDrawing {
+            if let touch = touches.first { shapeTouchBegan(touch) }
         }
             //Hide stickersVC if clicked outside it
         else if stickersVCIsVisible == true {
@@ -79,6 +81,8 @@ extension PhotoEditorViewController {
                 path.addLine(to: current)
                 layer.path = path.cgPath
             }
+        } else if isShapeDrawing {
+            if let touch = touches.first { shapeTouchMoved(touch) }
         }
     }
     
@@ -105,6 +109,9 @@ extension PhotoEditorViewController {
             }
             lineStartCanvasPoint = nil
             return
+        } else if isShapeDrawing {
+            if let touch = touches.first { shapeTouchEnded(touch) }
+            return
         }
         // Discard pending snapshot if no drawing occurred
         discardPendingDrawSnapshot()
@@ -123,6 +130,11 @@ extension PhotoEditorViewController {
         linePreviewLayer?.removeFromSuperlayer()
         linePreviewLayer = nil
         lineStartCanvasPoint = nil
+
+        // Clean up shape drawing state
+        shapePreviewLayer?.removeFromSuperlayer()
+        shapePreviewLayer = nil
+        shapeStartCanvasPoint = nil
     }
 
     func drawLineFrom(_ fromPoint: CGPoint, toPoint: CGPoint) {

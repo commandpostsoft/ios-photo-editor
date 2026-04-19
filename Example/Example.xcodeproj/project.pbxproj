@@ -3,17 +3,18 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 55;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		058A26071EBC5448007256A1 /* img.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 058A26061EBC5448007256A1 /* img.jpg */; };
 		05D951D51EBB868F00DC2299 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D951D41EBB868F00DC2299 /* AppDelegate.swift */; };
 		05D951D71EBB868F00DC2299 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D951D61EBB868F00DC2299 /* ViewController.swift */; };
+		AA0004000000000000000004 /* AIProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0005000000000000000005 /* AIProviders.swift */; };
 		05D951DA1EBB868F00DC2299 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 05D951D81EBB868F00DC2299 /* Main.storyboard */; };
 		05D951DC1EBB868F00DC2299 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 05D951DB1EBB868F00DC2299 /* Assets.xcassets */; };
 		05D951DF1EBB868F00DC2299 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 05D951DD1EBB868F00DC2299 /* LaunchScreen.storyboard */; };
-		FDDB06259DD13CA08BA46EDD /* Pods_Example.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26C7273557EAB2ED7CDEDA80 /* Pods_Example.framework */; };
+		AA0001000000000000000001 /* iOSPhotoEditor in Frameworks */ = {isa = PBXBuildFile; productRef = AA0002000000000000000002 /* iOSPhotoEditor */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,15 +22,11 @@
 		05D951D11EBB868F00DC2299 /* Example.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Example.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		05D951D41EBB868F00DC2299 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		05D951D61EBB868F00DC2299 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		AA0005000000000000000005 /* AIProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviders.swift; sourceTree = "<group>"; };
 		05D951D91EBB868F00DC2299 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		05D951DB1EBB868F00DC2299 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		05D951DE1EBB868F00DC2299 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		05D951E01EBB868F00DC2299 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		1CC43320DFA0E5FB03587FA7 /* Pods-Example.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Example.release.xcconfig"; path = "Pods/Target Support Files/Pods-Example/Pods-Example.release.xcconfig"; sourceTree = "<group>"; };
-		26C7273557EAB2ED7CDEDA80 /* Pods_Example.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Example.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		34EDA09DBDA53A2A66F9E859 /* Pods-Example.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Example.debug.xcconfig"; path = "Pods/Target Support Files/Pods-Example/Pods-Example.debug.xcconfig"; sourceTree = "<group>"; };
-		9EEB4D5FF7C66761863E5E50 /* Pods-editorTest.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-editorTest.release.xcconfig"; path = "Pods/Target Support Files/Pods-editorTest/Pods-editorTest.release.xcconfig"; sourceTree = "<group>"; };
-		F2FE6D2857E80A528393FDF8 /* Pods-editorTest.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-editorTest.debug.xcconfig"; path = "Pods/Target Support Files/Pods-editorTest/Pods-editorTest.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,7 +34,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FDDB06259DD13CA08BA46EDD /* Pods_Example.framework in Frameworks */,
+				AA0001000000000000000001 /* iOSPhotoEditor in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,8 +46,6 @@
 			children = (
 				05D951D31EBB868F00DC2299 /* Example */,
 				05D951D21EBB868F00DC2299 /* Products */,
-				1F352662116A335209D67D04 /* Pods */,
-				8FD63C10435819EDE4B5DAF2 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -67,6 +62,7 @@
 			children = (
 				05D951D41EBB868F00DC2299 /* AppDelegate.swift */,
 				05D951D61EBB868F00DC2299 /* ViewController.swift */,
+				AA0005000000000000000005 /* AIProviders.swift */,
 				058A26061EBC5448007256A1 /* img.jpg */,
 				05D951D81EBB868F00DC2299 /* Main.storyboard */,
 				05D951DB1EBB868F00DC2299 /* Assets.xcassets */,
@@ -76,25 +72,6 @@
 			path = Example;
 			sourceTree = "<group>";
 		};
-		1F352662116A335209D67D04 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				F2FE6D2857E80A528393FDF8 /* Pods-editorTest.debug.xcconfig */,
-				9EEB4D5FF7C66761863E5E50 /* Pods-editorTest.release.xcconfig */,
-				34EDA09DBDA53A2A66F9E859 /* Pods-Example.debug.xcconfig */,
-				1CC43320DFA0E5FB03587FA7 /* Pods-Example.release.xcconfig */,
-			);
-			name = Pods;
-			sourceTree = "<group>";
-		};
-		8FD63C10435819EDE4B5DAF2 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				26C7273557EAB2ED7CDEDA80 /* Pods_Example.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -102,17 +79,18 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 05D951E31EBB868F00DC2299 /* Build configuration list for PBXNativeTarget "Example" */;
 			buildPhases = (
-				CC7FCE9F05E9FE4EED17C16F /* [CP] Check Pods Manifest.lock */,
 				05D951CD1EBB868F00DC2299 /* Sources */,
 				05D951CE1EBB868F00DC2299 /* Frameworks */,
 				05D951CF1EBB868F00DC2299 /* Resources */,
-				A08DC13F84E735E8E432D58A /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = Example;
+			packageProductDependencies = (
+				AA0002000000000000000002 /* iOSPhotoEditor */,
+			);
 			productName = editorTest;
 			productReference = 05D951D11EBB868F00DC2299 /* Example.app */;
 			productType = "com.apple.product-type.application";
@@ -145,6 +123,9 @@
 				Base,
 			);
 			mainGroup = 05D951C81EBB868F00DC2299;
+			packageReferences = (
+				AA0003000000000000000003 /* XCLocalSwiftPackageReference ".." */,
+			);
 			productRefGroup = 05D951D21EBB868F00DC2299 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -168,51 +149,13 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		A08DC13F84E735E8E432D58A /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Example/Pods-Example-frameworks.sh",
-				"${BUILT_PRODUCTS_DIR}/iOSPhotoEditor/iOSPhotoEditor.framework",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/iOSPhotoEditor.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Example/Pods-Example-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		CC7FCE9F05E9FE4EED17C16F /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-Example-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		05D951CD1EBB868F00DC2299 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				05D951D71EBB868F00DC2299 /* ViewController.swift in Sources */,
+				AA0004000000000000000004 /* AIProviders.swift in Sources */,
 				05D951D51EBB868F00DC2299 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -352,12 +295,11 @@
 		};
 		05D951E41EBB868F00DC2299 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 34EDA09DBDA53A2A66F9E859 /* Pods-Example.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = 8Y72ATFH5B;
 				INFOPLIST_FILE = "$(SRCROOT)/Example/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.hamed.editorexample;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -367,12 +309,11 @@
 		};
 		05D951E51EBB868F00DC2299 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1CC43320DFA0E5FB03587FA7 /* Pods-Example.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = 8Y72ATFH5B;
 				INFOPLIST_FILE = "$(SRCROOT)/Example/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.hamed.editorexample;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -402,6 +343,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AA0003000000000000000003 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "..";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA0002000000000000000002 /* iOSPhotoEditor */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = iOSPhotoEditor;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 05D951C91EBB868F00DC2299 /* Project object */;
 }
