@@ -56,27 +56,54 @@ public extension UIImage {
      Rotates the image by the specified radians
      */
     func rotate(radians: CGFloat) -> UIImage {
-        let rotatedSize = CGRect(origin: .zero, size: size)
-            .applying(CGAffineTransform(rotationAngle: radians))
-            .size
-        
-        UIGraphicsBeginImageContextWithOptions(rotatedSize, false, scale)
-        guard let context = UIGraphicsGetCurrentContext() else { return self }
-        
-        let origin = CGPoint(x: rotatedSize.width / 2.0,
-                             y: rotatedSize.height / 2.0)
-        
-        context.translateBy(x: origin.x, y: origin.y)
-        context.rotate(by: radians)
-        
-        draw(in: CGRect(x: -size.width / 2.0,
-                         y: -size.height / 2.0,
-                         width: size.width,
-                         height: size.height))
-        
-        let rotatedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        
-        return rotatedImage ?? self
+        return autoreleasepool {
+            // Exact integer-size swap for axis-aligned 90° rotations avoids the
+            // sub-pixel drift that CGRect.applying(rotationAngle:).size accumulates
+            // across repeated undo/redo round-trips.
+            let rotatedSize: CGSize
+            let normalized = normalizedQuarterTurn(radians)
+            if let quarterSize = quarterTurnSize(for: normalized, original: size) {
+                rotatedSize = quarterSize
+            } else {
+                rotatedSize = CGRect(origin: .zero, size: size)
+                    .applying(CGAffineTransform(rotationAngle: radians))
+                    .size
+            }
+
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: rotatedSize, format: format)
+
+            return renderer.image { ctx in
+                let cg = ctx.cgContext
+                cg.translateBy(x: rotatedSize.width / 2.0, y: rotatedSize.height / 2.0)
+                cg.rotate(by: radians)
+                draw(in: CGRect(x: -size.width / 2.0,
+                                y: -size.height / 2.0,
+                                width: size.width,
+                                height: size.height))
+            }
+        }
+    }
+
+    private func normalizedQuarterTurn(_ radians: CGFloat) -> CGFloat {
+        let twoPi = CGFloat.pi * 2
+        var r = radians.truncatingRemainder(dividingBy: twoPi)
+        if r > .pi { r -= twoPi }
+        if r < -.pi { r += twoPi }
+        return r
+    }
+
+    /// Returns the exact rotated size for ±π/2 or π (within a small epsilon);
+    /// returns nil for non-quarter-turn angles.
+    private func quarterTurnSize(for radians: CGFloat, original: CGSize) -> CGSize? {
+        let eps: CGFloat = 1e-6
+        if abs(radians) < eps { return original }
+        if abs(abs(radians) - .pi) < eps { return original }
+        if abs(abs(radians) - .pi / 2) < eps {
+            return CGSize(width: original.height, height: original.width)
+        }
+        return nil
     }
 }

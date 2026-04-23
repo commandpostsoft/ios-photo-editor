@@ -131,27 +131,32 @@ extension PhotoEditorViewController {
 
         // Use display image size for drawing layer to match the visible image exactly
         let drawingSize = displayImageSize
-        
-        UIGraphicsBeginImageContextWithOptions(drawingSize, false, UIScreen.main.scale)
-        guard let context = UIGraphicsGetCurrentContext() else {
-            UIGraphicsEndImageContext()
-            return
+        let existing = drawingOverlayView.image
+        let lineWidth = drawLineWidth
+        let strokeColor = drawColor
+
+        autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = UIScreen.main.scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: drawingSize, format: format)
+
+            drawingOverlayView.image = renderer.image { ctx in
+                let context = ctx.cgContext
+
+                // Draw existing drawing layer
+                existing?.draw(in: CGRect(origin: .zero, size: drawingSize))
+
+                // Draw the new line
+                context.move(to: fromPoint)
+                context.addLine(to: toPoint)
+                context.setLineCap(.round)
+                context.setLineWidth(lineWidth)
+                context.setStrokeColor(strokeColor.cgColor)
+                context.setBlendMode(.normal)
+                context.strokePath()
+            }
         }
-
-        // Draw existing drawing layer
-        drawingOverlayView.image?.draw(in: CGRect(origin: .zero, size: drawingSize))
-
-        // Draw the new line
-        context.move(to: fromPoint)
-        context.addLine(to: toPoint)
-        context.setLineCap(.round)
-        context.setLineWidth(drawLineWidth)
-        context.setStrokeColor(drawColor.cgColor)
-        context.setBlendMode(.normal)
-        context.strokePath()
-
-        drawingOverlayView.image = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
 
         // Mark image as modified when drawing occurs
         hasImageBeenModified = true
@@ -170,23 +175,24 @@ extension PhotoEditorViewController {
         let lineStart = CGPoint(x: padding, y: imageSize.height / 2)
         let lineEnd = CGPoint(x: padding + length, y: imageSize.height / 2)
 
-        UIGraphicsBeginImageContextWithOptions(imageSize, false, UIScreen.main.scale)
-        guard let context = UIGraphicsGetCurrentContext() else {
-            UIGraphicsEndImageContext()
-            return
+        let lineWidth = drawLineWidth
+        let strokeColor = drawColor
+
+        let image: UIImage = autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = UIScreen.main.scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: imageSize, format: format)
+            return renderer.image { ctx in
+                let context = ctx.cgContext
+                context.setLineCap(.round)
+                context.setLineWidth(lineWidth)
+                context.setStrokeColor(strokeColor.cgColor)
+                context.move(to: lineStart)
+                context.addLine(to: lineEnd)
+                context.strokePath()
+            }
         }
-
-        context.setLineCap(.round)
-        context.setLineWidth(drawLineWidth)
-        context.setStrokeColor(drawColor.cgColor)
-        context.move(to: lineStart)
-        context.addLine(to: lineEnd)
-        context.strokePath()
-
-        let lineImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        guard let image = lineImage else { return }
 
         saveSnapshot()
 

@@ -13,10 +13,15 @@ extension UIView {
      Convert UIView to UIImage with proper scale handling
      */
     func toImage() -> UIImage {
-        UIGraphicsBeginImageContextWithOptions(self.bounds.size, self.isOpaque, UIScreen.main.scale)
-        self.drawHierarchy(in: self.bounds, afterScreenUpdates: false)
-        let snapshotImageFromMyView = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return snapshotImageFromMyView!
+        return autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = UIScreen.main.scale
+            format.opaque = self.isOpaque
+            let renderer = UIGraphicsImageRenderer(size: self.bounds.size, format: format)
+            let drawRect = CGRect(origin: .zero, size: self.bounds.size)
+            return renderer.image { _ in
+                self.drawHierarchy(in: drawRect, afterScreenUpdates: false)
+            }
+        }
     }
 }

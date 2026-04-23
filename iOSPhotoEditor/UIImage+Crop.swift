@@ -21,14 +21,18 @@ extension UIImage {
     }
     
     fileprivate func rotatedImageWithTransform(_ transform: CGAffineTransform) -> UIImage {
-        UIGraphicsBeginImageContextWithOptions(size, false, scale)
-        let context = UIGraphicsGetCurrentContext()
-        context?.translateBy(x: size.width / 2.0, y: size.height / 2.0)
-        context?.concatenate(transform)
-        context?.translateBy(x: size.width / -2.0, y: size.height / -2.0)
-        draw(in: CGRect(x: 0.0, y: 0.0, width: size.width, height: size.height))
-        let rotatedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return rotatedImage!
+        return autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: size, format: format)
+            return renderer.image { ctx in
+                let cg = ctx.cgContext
+                cg.translateBy(x: size.width / 2.0, y: size.height / 2.0)
+                cg.concatenate(transform)
+                cg.translateBy(x: size.width / -2.0, y: size.height / -2.0)
+                draw(in: CGRect(x: 0.0, y: 0.0, width: size.width, height: size.height))
+            }
+        }
     }
 }

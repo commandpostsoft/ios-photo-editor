@@ -160,17 +160,19 @@ extension PhotoEditorViewController {
         exitLineDrawingMode()
         resetCanvasZoom(animated: false)
         guard let image = self.image else { return }
-        saveSnapshot()
 
-        // Rotate the full resolution image 90 degrees clockwise
-        let rotatedImage = image.rotate(radians: .pi / 2)
-        
-        // Rotate the drawing layer as well
-        rotateDrawingLayer(newImage: rotatedImage)
+        // Lossless delta undo: capture pre-rotation drawing overlay + subview
+        // transforms; store the *reverse* delta (-π/2) so that applying the
+        // entry rotates the post-rotation image back to its pre-rotation state.
+        let forwardDelta: CGFloat = .pi / 2
+        saveRotateUndoEntry(reverseDelta: -forwardDelta)
 
-        // Update the image view
-        setImageView(image: rotatedImage)
-        self.image = rotatedImage
+        autoreleasepool {
+            let rotatedImage = image.rotate(radians: forwardDelta)
+            rotateDrawingLayer(newImage: rotatedImage)
+            setImageView(image: rotatedImage)
+            self.image = rotatedImage
+        }
         hasImageBeenModified = true
     }
     

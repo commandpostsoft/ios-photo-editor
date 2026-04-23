@@ -702,62 +702,55 @@ public final class PhotoEditorViewController: UIViewController {
         
         // Start with the current image (which may be cropped/rotated)
         let originalSize = currentImage.size
-        
-        // Create high-resolution context using the original image's scale
-        UIGraphicsBeginImageContextWithOptions(originalSize, false, currentImage.scale)
-        defer { UIGraphicsEndImageContext() }
-        
-        guard let context = UIGraphicsGetCurrentContext() else {
-            return canvasView.toImage()
-        }
-        
-        // Draw the base image at full resolution
-        currentImage.draw(in: CGRect(origin: .zero, size: originalSize))
-
-        // Render text views and stickers at high resolution
         let imageRect = getImageBoundsInCanvas()
+        let subviews = contentSubviews
+        let drawingImage = drawingOverlayView.image
+        let scale = displayToOriginalScale
 
-        for subview in contentSubviews {
-            context.saveGState()
+        return autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = currentImage.scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: originalSize, format: format)
 
-            // Convert subview position from canvas coordinates to image coordinates
-            let subviewCenter = subview.center
-            let relativeX = (subviewCenter.x - imageRect.origin.x) / imageRect.width
-            let relativeY = (subviewCenter.y - imageRect.origin.y) / imageRect.height
+            return renderer.image { ctx in
+                let context = ctx.cgContext
 
-            // Skip if subview is outside image bounds
-            guard relativeX >= 0 && relativeX <= 1 && relativeY >= 0 && relativeY <= 1 else {
-                context.restoreGState()
-                continue
+                // Draw the base image at full resolution
+                currentImage.draw(in: CGRect(origin: .zero, size: originalSize))
+
+                // Render text views and stickers at high resolution
+                for subview in subviews {
+                    context.saveGState()
+
+                    let subviewCenter = subview.center
+                    let relativeX = (subviewCenter.x - imageRect.origin.x) / imageRect.width
+                    let relativeY = (subviewCenter.y - imageRect.origin.y) / imageRect.height
+
+                    guard relativeX >= 0 && relativeX <= 1 && relativeY >= 0 && relativeY <= 1 else {
+                        context.restoreGState()
+                        continue
+                    }
+
+                    let originalCenterX = relativeX * originalSize.width
+                    let originalCenterY = relativeY * originalSize.height
+
+                    context.translateBy(x: originalCenterX, y: originalCenterY)
+                    context.scaleBy(x: scale, y: scale)
+                    context.concatenate(subview.transform)
+                    context.translateBy(x: -subview.bounds.width/2, y: -subview.bounds.height/2)
+
+                    subview.layer.render(in: context)
+
+                    context.restoreGState()
+                }
+
+                // Draw the freehand drawing overlay on top of subviews
+                if let drawingImage = drawingImage {
+                    drawingImage.draw(in: CGRect(origin: .zero, size: originalSize))
+                }
             }
-
-            // Calculate position and size at original resolution
-            let originalCenterX = relativeX * originalSize.width
-            let originalCenterY = relativeY * originalSize.height
-            let scale = displayToOriginalScale
-
-            context.translateBy(x: originalCenterX, y: originalCenterY)
-            context.scaleBy(x: scale, y: scale)
-            context.concatenate(subview.transform)
-            context.translateBy(x: -subview.bounds.width/2, y: -subview.bounds.height/2)
-
-            // Render the subview
-            subview.layer.render(in: context)
-
-            context.restoreGState()
         }
-
-        // Draw the freehand drawing overlay on top of subviews
-        if let drawingImage = drawingOverlayView.image {
-            let scaledDrawingRect = CGRect(origin: .zero, size: originalSize)
-            drawingImage.draw(in: scaledDrawingRect)
-        }
-
-        guard let finalImage = UIGraphicsGetImageFromCurrentImageContext() else {
-            return canvasView.toImage()
-        }
-        
-        return finalImage
     }
     
     // MARK: - Canvas Rescaling
@@ -816,12 +809,15 @@ public final class PhotoEditorViewController: UIViewController {
             return image
         }
 
-        UIGraphicsBeginImageContextWithOptions(newSize, false, image.scale)
-        defer { UIGraphicsEndImageContext() }
-
-        image.draw(in: CGRect(origin: .zero, size: newSize))
-
-        return UIGraphicsGetImageFromCurrentImageContext() ?? image
+        return autoreleasepool {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = image.scale
+            format.opaque = false
+            let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+            return renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        }
     }
 
     // MARK: - Undo/Redo
@@ -899,7 +895,22 @@ public final class PhotoEditorViewController: UIViewController {
     func saveSnapshot() {
         guard !hiddenControls.contains(.undoRedo) else { return }
         let snapshot = createSnapshot()
-        editorUndoManager.pushUndo(snapshot)
+        editorUndoManager.pushUndo(.snapshot(snapshot))
+        updateUndoRedoButtons()
+    }
+
+    /// Push a lossless rotate delta onto the undo stack. `reverseDelta` is the
+    /// rotation that, when applied to the *post-rotation* image, returns it to
+    /// its pre-rotation state (so for a forward +π/2 rotate, pass -π/2).
+    /// Captures the pre-rotation drawing overlay and subview transforms; the
+    /// full-resolution base image is **not** retained.
+    func saveRotateUndoEntry(reverseDelta: CGFloat) {
+        guard !hiddenControls.contains(.undoRedo) else { return }
+        editorUndoManager.pushUndo(.rotate(
+            delta: reverseDelta,
+            drawingImage: drawingOverlayView.image,
+            subviewSnapshots: captureSubviewSnapshots()
+        ))
         updateUndoRedoButtons()
     }
 
@@ -913,7 +924,7 @@ public final class PhotoEditorViewController: UIViewController {
     func commitPendingDrawSnapshot() {
         guard let snapshot = pendingDrawSnapshot else { return }
         pendingDrawSnapshot = nil
-        editorUndoManager.pushUndo(snapshot)
+        editorUndoManager.pushUndo(.snapshot(snapshot))
         updateUndoRedoButtons()
     }
 
@@ -922,7 +933,7 @@ public final class PhotoEditorViewController: UIViewController {
         pendingDrawSnapshot = nil
     }
 
-    private func createSnapshot() -> EditorSnapshot {
+    func captureSubviewSnapshots() -> [SubviewSnapshot] {
         var subviewSnapshots: [SubviewSnapshot] = []
         for subview in contentSubviews {
             let kind: SubviewSnapshot.Kind
@@ -948,30 +959,22 @@ public final class PhotoEditorViewController: UIViewController {
                 tag: subview.tag
             ))
         }
+        return subviewSnapshots
+    }
+
+    private func createSnapshot() -> EditorSnapshot {
         return EditorSnapshot(
             drawingImage: drawingOverlayView.image,
             baseImage: self.image,
-            subviewSnapshots: subviewSnapshots
+            subviewSnapshots: captureSubviewSnapshots()
         )
     }
 
-    private func restoreSnapshot(_ snapshot: EditorSnapshot, isRedo: Bool = false) {
-        // Restore drawing layer
-        drawingOverlayView.image = snapshot.drawingImage
-
-        // Restore base image
-        if let baseImage = snapshot.baseImage {
-            self.image = baseImage
-            setImageView(image: baseImage)
-        }
-
-        // Remove all content subviews (keep drawingOverlayView)
+    private func restoreSubviews(from snapshots: [SubviewSnapshot]) {
         for subview in contentSubviews {
             subview.removeFromSuperview()
         }
-
-        // Recreate subviews
-        for sub in snapshot.subviewSnapshots {
+        for sub in snapshots {
             let view: UIView
             switch sub.kind {
             case .image(let img, let contentMode):
@@ -1009,9 +1012,72 @@ public final class PhotoEditorViewController: UIViewController {
             addGestures(view: view)
         }
         ensureDrawingOverlayOnTop()
+    }
+
+    private func restoreSnapshot(_ snapshot: EditorSnapshot, isRedo: Bool = false) {
+        drawingOverlayView.image = snapshot.drawingImage
+
+        if let baseImage = snapshot.baseImage {
+            self.image = baseImage
+            setImageView(image: baseImage)
+        }
+
+        restoreSubviews(from: snapshot.subviewSnapshots)
 
         hasImageBeenModified = isRedo || editorUndoManager.canUndo
         updateUndoRedoButtons()
+    }
+
+    /// Applies a rotate undo/redo entry: rotates the base image by `delta`,
+    /// installs the saved `drawingImage` verbatim (no resample), and restores
+    /// `subviewSnapshots` as the content layer. Returns false if the base
+    /// image is nil (caller must not have captured a reverse entry in that case).
+    @discardableResult
+    private func applyRotateEntry(delta: CGFloat, drawingImage: UIImage?, subviewSnapshots: [SubviewSnapshot], isRedo: Bool) -> Bool {
+        guard let image = self.image else { return false }
+        autoreleasepool {
+            let rotatedImage = image.rotate(radians: delta)
+            setImageView(image: rotatedImage)
+            self.image = rotatedImage
+        }
+        drawingOverlayView.image = drawingImage
+        restoreSubviews(from: subviewSnapshots)
+        hasImageBeenModified = isRedo || editorUndoManager.canUndo
+        updateUndoRedoButtons()
+        return true
+    }
+
+    /// Builds the reverse entry for the current editor state, shaped to match
+    /// the entry that was just popped. Used as the atomic undo/redo closure.
+    private func reverseEntryForCurrentState(matching popped: EditorUndoEntry) -> EditorUndoEntry {
+        switch popped {
+        case .snapshot:
+            return .snapshot(createSnapshot())
+        case .rotate(let delta, _, _):
+            return .rotate(
+                delta: -delta,
+                drawingImage: drawingOverlayView.image,
+                subviewSnapshots: captureSubviewSnapshots()
+            )
+        }
+    }
+
+    /// Returns true if any content subview has a gesture recognizer in an
+    /// active (began/changed) state. Undo/redo while a gesture is mid-flight
+    /// would tear down the view the recognizer is attached to.
+    private func hasActiveSubviewGesture() -> Bool {
+        for subview in contentSubviews {
+            guard let recognizers = subview.gestureRecognizers else { continue }
+            for recognizer in recognizers {
+                switch recognizer.state {
+                case .began, .changed:
+                    return true
+                default:
+                    continue
+                }
+            }
+        }
+        return false
     }
 
     private func updateUndoRedoButtons() {
@@ -1037,19 +1103,37 @@ public final class PhotoEditorViewController: UIViewController {
     }
 
     @objc private func undoTapped() {
-        // Don't undo mid-stroke
+        // Don't undo mid-stroke or during an in-flight subview gesture.
         guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
-        let current = createSnapshot()
-        if let snapshot = editorUndoManager.undo(currentState: current) {
+        guard !hasActiveSubviewGesture() else { return }
+
+        let popped = editorUndoManager.applyUndo { [weak self] entry in
+            self?.reverseEntryForCurrentState(matching: entry) ?? entry
+        }
+        guard let popped = popped else { return }
+
+        switch popped {
+        case .snapshot(let snapshot):
             restoreSnapshot(snapshot)
+        case .rotate(let delta, let drawingImage, let subviewSnapshots):
+            applyRotateEntry(delta: delta, drawingImage: drawingImage, subviewSnapshots: subviewSnapshots, isRedo: false)
         }
     }
 
     @objc private func redoTapped() {
         guard lastPoint == nil && lineStartCanvasPoint == nil else { return }
-        let current = createSnapshot()
-        if let snapshot = editorUndoManager.redo(currentState: current) {
+        guard !hasActiveSubviewGesture() else { return }
+
+        let popped = editorUndoManager.applyRedo { [weak self] entry in
+            self?.reverseEntryForCurrentState(matching: entry) ?? entry
+        }
+        guard let popped = popped else { return }
+
+        switch popped {
+        case .snapshot(let snapshot):
             restoreSnapshot(snapshot, isRedo: true)
+        case .rotate(let delta, let drawingImage, let subviewSnapshots):
+            applyRotateEntry(delta: delta, drawingImage: drawingImage, subviewSnapshots: subviewSnapshots, isRedo: true)
         }
     }
 }
